@@ -92,9 +92,11 @@ class AssetLoader {
     this.loaded = true;
 
     // Strategy 1: Try loading a combined spritesheet
+    // Use content-type check to avoid Vercel SPA routing returning HTML for missing files
     try {
-      const resp = await fetch('/sprites/spritesheet.json', { method: 'HEAD' });
-      if (resp.ok) {
+      const resp = await fetch('/sprites/spritesheet.json', { method: 'GET' });
+      const contentType = resp.headers.get('content-type') || '';
+      if (resp.ok && contentType.includes('application/json')) {
         const sheetData = await Assets.load<SpritesheetData>('/sprites/spritesheet.json');
         if (sheetData && typeof sheetData === 'object' && 'textures' in sheetData) {
           const sheet = sheetData as unknown as Spritesheet;
@@ -110,41 +112,34 @@ class AssetLoader {
     }
 
     // Strategy 2: Check for a manifest listing available individual files
-    // Create public/sprites/manifest.json with { "files": ["player/player_voidwalker_idle_0.png", ...] }
-    let fileList: string[] = [];
     try {
       const resp = await fetch('/sprites/manifest.json');
-      if (resp.ok) {
+      const contentType = resp.headers.get('content-type') || '';
+      if (resp.ok && contentType.includes('application/json')) {
         const manifest = await resp.json();
-        if (manifest && Array.isArray(manifest.files)) {
-          fileList = manifest.files;
+        if (manifest && Array.isArray(manifest.files) && manifest.files.length > 0) {
+          await Promise.allSettled(
+            manifest.files.map(async (filePath: string) => {
+              const key = filePath.replace(/^.*\//, '').replace(/\.png$/, '');
+              try {
+                const tex = await Assets.load<Texture>(`/sprites/${filePath}`);
+                if (tex && tex !== Texture.EMPTY) {
+                  this.loadedTextures.set(key, tex);
+                }
+              } catch {
+                // Missing file
+              }
+            })
+          );
+          console.log(`[AssetLoader] Loaded ${this.loadedTextures.size}/${manifest.files.length} sprite assets`);
+          return;
         }
       }
     } catch {
-      // No manifest — skip individual loading entirely
+      // No manifest
     }
 
-    if (fileList.length === 0) {
-      console.log('[AssetLoader] No sprite assets found — using procedural generation');
-      return;
-    }
-
-    // Load only the files listed in the manifest
-    await Promise.allSettled(
-      fileList.map(async (filePath: string) => {
-        const key = filePath.replace(/^.*\//, '').replace(/\.png$/, '');
-        try {
-          const tex = await Assets.load<Texture>(`/sprites/${filePath}`);
-          if (tex && tex !== Texture.EMPTY) {
-            this.loadedTextures.set(key, tex);
-          }
-        } catch {
-          // Missing file — will use procedural fallback
-        }
-      })
-    );
-
-    console.log(`[AssetLoader] Loaded ${this.loadedTextures.size}/${fileList.length} sprite assets`);
+    console.log('[AssetLoader] No sprite assets found — using procedural generation');
   }
 
   /**

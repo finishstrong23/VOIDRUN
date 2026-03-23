@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { Game } from './game/Game';
 import { useGameState } from './ui/hooks/useGameState';
 import { useWakeLock } from './ui/hooks/useWakeLock';
@@ -16,6 +16,8 @@ import type { Upgrade } from './types';
 
 export const App: React.FC = () => {
   const gameRef = useRef<Game | null>(null);
+  const gameReadyRef = useRef(false);
+  const [gameReady, setGameReady] = useState(false);
   const {
     screen, setScreen,
     pendingUpgrades, setPendingUpgrades,
@@ -33,14 +35,15 @@ export const App: React.FC = () => {
 
     initAudio();
     setMobile(isMobileDevice());
+    setScreen('title');
 
     const game = new Game();
     gameRef.current = game;
 
-    // Go straight to title, init game in background
-    setScreen('title');
-
     game.init(container).then(() => {
+      gameReadyRef.current = true;
+      setGameReady(true);
+
       game.setOnStateSync((state) => {
         syncRunState(state as Parameters<typeof syncRunState>[0]);
       });
@@ -72,6 +75,9 @@ export const App: React.FC = () => {
       });
     }).catch((err) => {
       console.error('[VOIDRUN] Game init failed:', err);
+      // Still allow menu navigation even if game fails
+      gameReadyRef.current = true;
+      setGameReady(true);
     });
 
     return () => {
@@ -86,6 +92,7 @@ export const App: React.FC = () => {
   }, [screen]);
 
   const handleClassSelect = useCallback((classId: string) => {
+    if (!gameReadyRef.current) return;
     startRun(classId);
     gameRef.current?.startRun(classId);
   }, [startRun]);
@@ -113,6 +120,7 @@ export const App: React.FC = () => {
   }, [setScreen, endRun]);
 
   const handlePlayAgain = useCallback(() => {
+    if (!gameReadyRef.current) return;
     const classId = useGameState.getState().selectedClass ?? 'voidwalker';
     startRun(classId);
     gameRef.current?.startRun(classId);
@@ -128,7 +136,7 @@ export const App: React.FC = () => {
       <div id="ui-overlay">
         {screen === 'title' && <TitleScreen />}
         {screen === 'class_select' && (
-          <ClassSelect onSelect={handleClassSelect} onBack={() => setScreen('title')} />
+          <ClassSelect onSelect={handleClassSelect} onBack={() => setScreen('title')} ready={gameReady} />
         )}
         {screen === 'playing' && <GameHUD onPause={handlePause} onDash={handleDash} />}
         {screen === 'upgrade_select' && pendingUpgrades.length > 0 && (

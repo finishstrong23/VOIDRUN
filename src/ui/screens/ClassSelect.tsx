@@ -4,6 +4,7 @@ import { CLASSES } from '../../data/classes';
 interface ClassSelectProps {
   onSelect: (classId: string) => void;
   onBack: () => void;
+  ready?: boolean;
 }
 
 const baseStyle: React.CSSProperties = {
@@ -16,7 +17,7 @@ const WEAPON_NAMES: Record<string, string> = {
   plasmaLance: 'Plasma Lance',
 };
 
-export const ClassSelect: React.FC<ClassSelectProps> = ({ onSelect, onBack }) => {
+export const ClassSelect: React.FC<ClassSelectProps> = ({ onSelect, onBack, ready = true }) => {
   return (
     <div
       style={{
@@ -66,13 +67,17 @@ export const ClassSelect: React.FC<ClassSelectProps> = ({ onSelect, onBack }) =>
           maxWidth: 340,
         }}
       >
+        {!ready && (
+          <div style={{ textAlign: 'center', padding: 16 }}>
+            <span style={{ fontSize: 8, color: '#708090' }}>Loading engine...</span>
+          </div>
+        )}
         {CLASSES.map((cls) => {
-          // Parse accent color for gradient
           const accentHex = cls.accent;
           return (
             <button
               key={cls.id}
-              onClick={() => onSelect(cls.id)}
+              onClick={() => ready && onSelect(cls.id)}
               style={{
                 ...baseStyle,
                 width: '100%',
