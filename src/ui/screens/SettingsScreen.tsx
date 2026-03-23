@@ -23,13 +23,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
   const onVolumeChange = (v: number) => { setVolume(v); setMasterVolume(v); };
   const onSfxToggle = (e: boolean) => { setSfx(e); setSfxEnabled(e); };
   const onQualityChange = (q: QualityTier | 'auto') => setQualityOverride(q);
+
   return (
     <div
       style={{
         ...baseStyle,
         position: 'fixed',
         inset: 0,
-        backgroundColor: '#0f1923',
+        background: 'linear-gradient(180deg, #0a1018 0%, #0f1923 30%, #14202e 60%, #0d1520 100%)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -39,36 +40,49 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
         overflowY: 'auto',
       }}
     >
-      <h2
+      {/* Header */}
+      <div
         style={{
-          fontSize: 16,
-          color: '#e8edf2',
-          margin: 0,
-          letterSpacing: 3,
+          padding: '8px 24px',
+          background: 'linear-gradient(180deg, rgba(30,45,65,0.9) 0%, rgba(20,32,48,0.9) 100%)',
+          borderRadius: 8,
+          border: '1.5px solid rgba(60,90,120,0.4)',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
         }}
       >
-        SETTINGS
-      </h2>
+        <h2
+          style={{
+            fontSize: 14,
+            color: '#d0dce8',
+            margin: 0,
+            letterSpacing: 3,
+            textShadow: '0 1px 3px rgba(0,0,0,0.4)',
+          }}
+        >
+          SETTINGS
+        </h2>
+      </div>
 
       {/* Settings panel */}
       <div
         style={{
-          backgroundColor: 'rgba(28,42,58,0.85)',
-          border: '1px solid rgba(45,74,94,0.4)',
-          borderRadius: 8,
+          background: 'linear-gradient(180deg, rgba(25,38,55,0.9) 0%, rgba(18,28,42,0.9) 100%)',
+          border: '1.5px solid rgba(50,75,100,0.4)',
+          borderRadius: 12,
           padding: '20px',
           width: '100%',
           maxWidth: 320,
           display: 'flex',
           flexDirection: 'column',
           gap: 24,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.3), inset 0 1px 1px rgba(255,255,255,0.04)',
         }}
       >
         {/* Volume slider */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 8, color: '#e8edf2' }}>VOLUME</span>
-            <span style={{ fontSize: 8, color: '#00e5ff' }}>
+            <span style={{ fontSize: 8, color: '#d0dce8' }}>VOLUME</span>
+            <span style={{ fontSize: 8, color: '#80c0ff', textShadow: '0 0 4px rgba(0,150,255,0.2)' }}>
               {Math.round(masterVolume * 100)}%
             </span>
           </div>
@@ -84,31 +98,36 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
               height: 6,
               appearance: 'none',
               WebkitAppearance: 'none',
-              backgroundColor: 'rgba(45,74,94,0.4)',
+              backgroundColor: 'rgba(30,50,70,0.6)',
               borderRadius: 3,
               outline: 'none',
               cursor: 'pointer',
-              accentColor: '#00e5ff',
+              accentColor: '#d83848',
             }}
           />
         </div>
 
         {/* SFX toggle */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 8, color: '#e8edf2' }}>SFX</span>
+          <span style={{ fontSize: 8, color: '#d0dce8' }}>SFX</span>
           <button
             onClick={() => onSfxToggle(!sfxEnabled)}
             style={{
               ...baseStyle,
               padding: '6px 16px',
-              borderRadius: 4,
+              borderRadius: 8,
               cursor: 'pointer',
               fontSize: 8,
               outline: 'none',
               WebkitTapHighlightColor: 'transparent',
-              backgroundColor: sfxEnabled ? '#00e5ff' : 'transparent',
-              color: sfxEnabled ? '#0f1923' : '#7a8fa0',
-              border: sfxEnabled ? 'none' : '1px solid rgba(45,74,94,0.6)',
+              background: sfxEnabled
+                ? 'linear-gradient(180deg, #d83040 0%, #a82030 100%)'
+                : 'linear-gradient(180deg, rgba(40,55,75,0.9) 0%, rgba(25,38,55,0.9) 100%)',
+              color: sfxEnabled ? '#fff' : '#7090a8',
+              border: sfxEnabled ? '1.5px solid #e85060' : '1.5px solid rgba(60,85,110,0.4)',
+              boxShadow: sfxEnabled
+                ? '0 2px 6px rgba(200,40,60,0.3)'
+                : '0 1px 3px rgba(0,0,0,0.2)',
             }}
           >
             {sfxEnabled ? 'ON' : 'OFF'}
@@ -117,7 +136,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
 
         {/* Quality buttons */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <span style={{ fontSize: 8, color: '#e8edf2' }}>QUALITY</span>
+          <span style={{ fontSize: 8, color: '#d0dce8' }}>QUALITY</span>
           <div style={{ display: 'flex', gap: 6 }}>
             {QUALITY_OPTIONS.map((opt) => {
               const isActive = qualityOverride === opt.value;
@@ -129,15 +148,21 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                     ...baseStyle,
                     flex: 1,
                     padding: '8px 4px',
-                    borderRadius: 4,
+                    borderRadius: 8,
                     cursor: 'pointer',
                     fontSize: 7,
                     outline: 'none',
                     WebkitTapHighlightColor: 'transparent',
-                    backgroundColor: isActive ? '#00e5ff' : 'transparent',
-                    color: isActive ? '#0f1923' : '#7a8fa0',
-                    border: isActive ? 'none' : '1px solid rgba(45,74,94,0.4)',
+                    background: isActive
+                      ? 'linear-gradient(180deg, #d83040 0%, #a82030 100%)'
+                      : 'linear-gradient(180deg, rgba(40,55,75,0.8) 0%, rgba(25,38,55,0.8) 100%)',
+                    color: isActive ? '#fff' : '#7090a8',
+                    border: isActive ? '1.5px solid #e85060' : '1.5px solid rgba(60,85,110,0.3)',
+                    boxShadow: isActive
+                      ? '0 2px 6px rgba(200,40,60,0.3)'
+                      : '0 1px 3px rgba(0,0,0,0.2)',
                     transition: 'all 0.15s ease',
+                    letterSpacing: 1,
                   }}
                 >
                   {opt.label}
@@ -153,16 +178,18 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
         onClick={onBack}
         style={{
           ...baseStyle,
-          backgroundColor: 'transparent',
-          color: '#7a8fa0',
-          border: '1px solid rgba(45,74,94,0.4)',
-          borderRadius: 6,
+          background: 'linear-gradient(180deg, rgba(40,55,75,0.9) 0%, rgba(25,38,55,0.9) 100%)',
+          color: '#90a0b8',
+          border: '1.5px solid rgba(60,85,110,0.4)',
+          borderRadius: 10,
           padding: '10px 24px',
           cursor: 'pointer',
           fontSize: 9,
           outline: 'none',
           WebkitTapHighlightColor: 'transparent',
           marginTop: 8,
+          boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+          letterSpacing: 1,
         }}
       >
         BACK

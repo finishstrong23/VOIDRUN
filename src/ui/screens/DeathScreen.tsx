@@ -16,19 +16,6 @@ function formatTime(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-const buttonBase: React.CSSProperties = {
-  ...baseStyle,
-  width: '100%',
-  maxWidth: 240,
-  padding: '12px 24px',
-  borderRadius: 6,
-  cursor: 'pointer',
-  fontSize: 10,
-  letterSpacing: 1,
-  outline: 'none',
-  WebkitTapHighlightColor: 'transparent',
-};
-
 export const DeathScreen: React.FC<DeathScreenProps> = ({
   onPlayAgain,
   onMenu,
@@ -70,46 +57,79 @@ export const DeathScreen: React.FC<DeathScreenProps> = ({
         padding: '20px 16px',
       }}
     >
-      {/* YOU DIED */}
-      <h2
+      {/* YOU DIED banner */}
+      <div
         style={{
-          fontSize: 24,
-          color: '#ff2d55',
-          margin: 0,
-          textShadow: '0 0 20px #ff2d5566, 0 0 40px #ff2d5533',
-          letterSpacing: 4,
+          position: 'relative',
+          padding: '10px 36px',
+          background: 'linear-gradient(180deg, #8a1828 0%, #601018 50%, #480c10 100%)',
+          borderRadius: 6,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.1)',
+          border: '1.5px solid #a82838',
         }}
       >
-        YOU DIED
-      </h2>
-
-      {/* High score */}
-      {isHighScore && (
-        <p
+        <div
           style={{
-            fontSize: 10,
-            color: '#ffd60a',
+            position: 'absolute',
+            top: 2,
+            left: 4,
+            right: 4,
+            height: '40%',
+            borderRadius: '4px 4px 0 0',
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 100%)',
+            pointerEvents: 'none',
+          }}
+        />
+        <h2
+          style={{
+            fontSize: 22,
+            color: '#ff8090',
             margin: 0,
-            textShadow: '0 0 12px #ffd60a66',
-            letterSpacing: 2,
+            textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+            letterSpacing: 4,
           }}
         >
-          NEW HIGH SCORE!
-        </p>
+          YOU DIED
+        </h2>
+      </div>
+
+      {/* High score notification */}
+      {isHighScore && (
+        <div
+          style={{
+            padding: '5px 14px',
+            borderRadius: 8,
+            background: 'linear-gradient(180deg, rgba(60,45,10,0.8) 0%, rgba(40,30,5,0.8) 100%)',
+            border: '1px solid rgba(200,170,40,0.4)',
+            boxShadow: '0 0 12px rgba(255,200,50,0.2)',
+          }}
+        >
+          <span
+            style={{
+              fontSize: 9,
+              color: '#ffd060',
+              textShadow: '0 0 8px rgba(255,200,50,0.3)',
+              letterSpacing: 2,
+            }}
+          >
+            NEW HIGH SCORE!
+          </span>
+        </div>
       )}
 
       {/* Stats panel */}
       <div
         style={{
-          backgroundColor: 'rgba(28,42,58,0.85)',
-          border: '1px solid rgba(45,74,94,0.4)',
-          borderRadius: 8,
-          padding: '16px 20px',
+          background: 'linear-gradient(180deg, rgba(25,38,55,0.9) 0%, rgba(18,28,42,0.9) 100%)',
+          border: '1.5px solid rgba(50,75,100,0.4)',
+          borderRadius: 12,
+          padding: '18px 22px',
           width: '100%',
           maxWidth: 280,
           display: 'flex',
           flexDirection: 'column',
           gap: 10,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.04)',
         }}
       >
         {stats.map((stat) => (
@@ -121,8 +141,16 @@ export const DeathScreen: React.FC<DeathScreenProps> = ({
               alignItems: 'center',
             }}
           >
-            <span style={{ fontSize: 8, color: '#7a8fa0' }}>{stat.label}</span>
-            <span style={{ fontSize: 10, color: '#e8edf2' }}>{stat.value}</span>
+            <span style={{ fontSize: 7, color: '#7090a8' }}>{stat.label}</span>
+            <span
+              style={{
+                fontSize: 10,
+                color: '#e0e8f0',
+                textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+              }}
+            >
+              {stat.value}
+            </span>
           </div>
         ))}
       </div>
@@ -141,25 +169,74 @@ export const DeathScreen: React.FC<DeathScreenProps> = ({
         <button
           onClick={onPlayAgain}
           style={{
-            ...buttonBase,
-            backgroundColor: '#00e5ff',
-            color: '#0f1923',
-            border: 'none',
-            boxShadow: '0 0 12px #00e5ff44',
+            ...baseStyle,
+            width: '100%',
+            maxWidth: 240,
+            padding: '14px 24px',
+            borderRadius: 10,
+            cursor: 'pointer',
+            fontSize: 10,
+            letterSpacing: 2,
+            outline: 'none',
+            WebkitTapHighlightColor: 'transparent',
+            color: '#fff',
+            background: 'linear-gradient(180deg, #d83040 0%, #b82030 40%, #901828 100%)',
+            border: '2px solid #e85060',
+            boxShadow: '0 4px 12px rgba(200,40,60,0.4), inset 0 1px 1px rgba(255,255,255,0.15)',
+            textShadow: '0 2px 4px rgba(0,0,0,0.4)',
+            position: 'relative',
+            overflow: 'hidden',
           }}
         >
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '45%',
+              borderRadius: '8px 8px 0 0',
+              background: 'linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 100%)',
+              pointerEvents: 'none',
+            }}
+          />
           PLAY AGAIN
         </button>
 
         <button
           onClick={onMenu}
           style={{
-            ...buttonBase,
-            backgroundColor: 'transparent',
-            color: '#e8edf2',
-            border: '1px solid rgba(45,74,94,0.6)',
+            ...baseStyle,
+            width: '100%',
+            maxWidth: 240,
+            padding: '12px 24px',
+            borderRadius: 10,
+            cursor: 'pointer',
+            fontSize: 10,
+            letterSpacing: 2,
+            outline: 'none',
+            WebkitTapHighlightColor: 'transparent',
+            color: '#c0d0e0',
+            background: 'linear-gradient(180deg, rgba(40,55,75,0.9) 0%, rgba(25,38,55,0.9) 100%)',
+            border: '1.5px solid rgba(60,85,110,0.5)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3), inset 0 1px 1px rgba(255,255,255,0.05)',
+            textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+            position: 'relative',
+            overflow: 'hidden',
           }}
         >
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '45%',
+              borderRadius: '8px 8px 0 0',
+              background: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 100%)',
+              pointerEvents: 'none',
+            }}
+          />
           MENU
         </button>
       </div>

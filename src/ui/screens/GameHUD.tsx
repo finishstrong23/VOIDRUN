@@ -47,9 +47,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
     enemiesRemaining,
   } = useGameState();
 
-  const damageTrigger = playerHP; // use HP changes as damage trigger
+  const damageTrigger = playerHP;
 
-  // Objective text fades after 3s
   const [showObjective, setShowObjective] = useState(true);
 
   useEffect(() => {
@@ -58,11 +57,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
     return () => clearTimeout(timer);
   }, [currentWave]);
 
-  // Next boss timer estimate (boss every 5 waves)
   const wavesUntilBoss = 5 - (currentWave % 5);
   const nextBossText = activeBoss
     ? ''
-    : `Next Boss: ${wavesUntilBoss}w`;
+    : `Boss: ${wavesUntilBoss}w`;
 
   return (
     <div
@@ -74,7 +72,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         zIndex: 50,
       }}
     >
-      {/* Top bar */}
+      {/* ═══ TOP SECTION ═══ */}
       <div
         style={{
           position: 'absolute',
@@ -85,27 +83,52 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           flexDirection: 'column',
         }}
       >
-        {/* Main top bar */}
+        {/* Main top bar — gradient panel */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '8px 12px',
-            backgroundColor: 'rgba(28,42,58,0.85)',
-            borderBottom: '1px solid rgba(45,74,94,0.4)',
+            background: 'linear-gradient(180deg, rgba(20,32,48,0.95) 0%, rgba(15,25,38,0.9) 100%)',
+            borderBottom: '1.5px solid rgba(50,80,110,0.35)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
             pointerEvents: 'auto',
           }}
         >
           {/* Left: Pause */}
           <PauseButton onPause={onPause} />
 
-          {/* Center: Wave + Time */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-            <span style={{ fontSize: 9, color: '#e8edf2' }}>
+          {/* Center: Wave info */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '4px 16px',
+              borderRadius: 10,
+              background: 'linear-gradient(180deg, rgba(50,20,28,0.8) 0%, rgba(35,12,18,0.8) 100%)',
+              border: '1px solid rgba(180,50,70,0.4)',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+            }}
+          >
+            <span
+              style={{
+                fontSize: 10,
+                color: '#ff8090',
+                textShadow: '0 0 8px rgba(255,80,100,0.3)',
+                letterSpacing: 1,
+              }}
+            >
               WAVE {currentWave}
             </span>
-            <span style={{ fontSize: 7, color: '#7a8fa0' }}>
+            <span
+              style={{
+                fontSize: 9,
+                color: '#e8d8c0',
+                textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+              }}
+            >
               {formatTime(runTime)}
             </span>
           </div>
@@ -132,9 +155,12 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         >
           <span
             style={{
-              fontSize: 9,
-              color: '#00e5ff',
-              textShadow: '0 0 10px #00e5ff66',
+              fontSize: 10,
+              color: '#e8d8c0',
+              textShadow: '0 1px 4px rgba(0,0,0,0.6), 0 0 12px rgba(255,200,150,0.2)',
+              padding: '4px 16px',
+              borderRadius: 8,
+              background: 'rgba(15,20,30,0.6)',
               opacity: showObjective ? 1 : 0,
               transition: 'opacity 0.5s ease',
             }}
@@ -153,11 +179,11 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         />
       )}
 
-      {/* Health bar + Weapons - top left area below bar */}
+      {/* Health bar + Weapons — top left below bar */}
       <div
         style={{
           position: 'absolute',
-          top: 72,
+          top: 68,
           left: 12,
           display: 'flex',
           flexDirection: 'column',
@@ -169,7 +195,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         <WeaponSlots weapons={equippedWeapons} />
       </div>
 
-      {/* Dash button - right side */}
+      {/* ═══ DASH BUTTON — right side ═══ */}
       <div
         style={{
           position: 'absolute',
@@ -185,7 +211,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         />
       </div>
 
-      {/* Joystick zone indicator - left side */}
+      {/* Joystick zone — left side */}
       <div
         style={{
           position: 'absolute',
@@ -194,7 +220,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           width: 100,
           height: 100,
           borderRadius: '50%',
-          border: '1px solid rgba(45,74,94,0.2)',
+          background: 'radial-gradient(circle, rgba(40,60,80,0.1) 0%, transparent 70%)',
+          border: '1.5px solid rgba(60,90,120,0.15)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -205,13 +232,13 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             width: 30,
             height: 30,
             borderRadius: '50%',
-            backgroundColor: 'rgba(45,74,94,0.15)',
-            border: '1px solid rgba(45,74,94,0.3)',
+            background: 'radial-gradient(circle, rgba(60,90,120,0.2) 0%, rgba(40,60,80,0.1) 100%)',
+            border: '1px solid rgba(60,90,120,0.25)',
           }}
         />
       </div>
 
-      {/* Bottom section */}
+      {/* ═══ BOTTOM SECTION ═══ */}
       <div
         style={{
           position: 'absolute',
@@ -231,16 +258,26 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '6px 12px',
-            backgroundColor: 'rgba(28,42,58,0.85)',
-            borderTop: '1px solid rgba(45,74,94,0.4)',
+            padding: '5px 12px',
+            background: 'linear-gradient(180deg, rgba(15,25,38,0.9) 0%, rgba(10,18,28,0.95) 100%)',
+            borderTop: '1px solid rgba(50,80,110,0.3)',
           }}
         >
           <EnemiesRemaining count={enemiesRemaining} />
           {nextBossText && (
-            <span style={{ fontSize: 8, color: '#7a8fa0' }}>
-              {nextBossText}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {/* Boss icon */}
+              <svg width={14} height={14} viewBox="0 0 14 14">
+                <circle cx={7} cy={6} r={4.5} fill="#3a1525" stroke="#6a2535" strokeWidth={0.5} />
+                <circle cx={5.5} cy={5.5} r={1} fill="#ff4060" />
+                <circle cx={8.5} cy={5.5} r={1} fill="#ff4060" />
+                <path d="M4 2 L3 0.5" stroke="#5a2030" strokeWidth={1} strokeLinecap="round" />
+                <path d="M10 2 L11 0.5" stroke="#5a2030" strokeWidth={1} strokeLinecap="round" />
+              </svg>
+              <span style={{ fontSize: 7, color: '#90a0b8' }}>
+                {nextBossText}
+              </span>
+            </div>
           )}
         </div>
       </div>

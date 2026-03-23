@@ -6,17 +6,12 @@ interface BossHealthBarProps {
   maxHP: number;
 }
 
-const baseStyle: React.CSSProperties = {
-  fontFamily: "'Press Start 2P', monospace",
-};
-
 export const BossHealthBar: React.FC<BossHealthBarProps> = ({ name, hp, maxHP }) => {
   const pct = Math.max(0, Math.min(1, hp / maxHP)) * 100;
 
   return (
     <div
       style={{
-        ...baseStyle,
         width: '70%',
         position: 'absolute',
         top: 52,
@@ -28,25 +23,39 @@ export const BossHealthBar: React.FC<BossHealthBarProps> = ({ name, hp, maxHP })
         zIndex: 20,
       }}
     >
-      <span
+      {/* Boss name */}
+      <div
         style={{
-          fontSize: 9,
-          color: '#ff2d55',
-          textShadow: '0 0 8px #ff2d5588, 0 0 16px #ff2d5544',
-          letterSpacing: 2,
-          textTransform: 'uppercase',
+          padding: '3px 14px',
+          borderRadius: 8,
+          background: 'linear-gradient(180deg, #3a1520 0%, #2a0e18 100%)',
+          border: '1px solid #6a2535',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
         }}
       >
-        {name}
-      </span>
+        <span
+          style={{
+            fontFamily: "'Press Start 2P', monospace",
+            fontSize: 8,
+            color: '#ff6878',
+            textShadow: '0 0 8px rgba(255,45,85,0.4)',
+            letterSpacing: 2,
+            textTransform: 'uppercase',
+          }}
+        >
+          {name}
+        </span>
+      </div>
+
+      {/* Health bar */}
       <div
         style={{
           width: '100%',
-          height: 14,
-          backgroundColor: 'rgba(28,42,58,0.85)',
-          borderRadius: 4,
-          border: '1px solid #ff2d55',
-          boxShadow: '0 0 10px #ff2d5533, inset 0 0 6px #ff2d5522',
+          height: 16,
+          borderRadius: 8,
+          background: 'linear-gradient(180deg, #1a0a0e 0%, #2a1218 100%)',
+          border: '1.5px solid #6a2535',
+          boxShadow: '0 0 10px rgba(255,45,85,0.2), inset 0 2px 4px rgba(0,0,0,0.5)',
           overflow: 'hidden',
           position: 'relative',
         }}
@@ -55,12 +64,25 @@ export const BossHealthBar: React.FC<BossHealthBarProps> = ({ name, hp, maxHP })
           style={{
             width: `${pct}%`,
             height: '100%',
-            background: 'linear-gradient(90deg, #ff2d55, #ff6b6b)',
-            borderRadius: 3,
+            background: 'linear-gradient(180deg, #ff5060 0%, #d82040 50%, #b01830 100%)',
+            borderRadius: 7,
             transition: 'width 0.2s ease',
-            boxShadow: '0 0 8px #ff2d5566',
+            position: 'relative',
           }}
-        />
+        >
+          {/* Glossy highlight */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 1,
+              left: 2,
+              right: 2,
+              height: '40%',
+              borderRadius: '6px 6px 0 0',
+              background: 'linear-gradient(180deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.05) 100%)',
+            }}
+          />
+        </div>
       </div>
     </div>
   );

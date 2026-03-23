@@ -10,17 +10,23 @@ const baseStyle: React.CSSProperties = {
   fontFamily: "'Press Start 2P', monospace",
 };
 
-const TYPE_BORDER_COLORS: Record<string, string> = {
-  weapon_level: '#ff2d55',
-  weapon_new: '#ffd60a',
-  stat: '#00e5ff',
+const TYPE_COLORS: Record<string, { bg: string; border: string; glow: string }> = {
+  weapon_level: { bg: '#4a1525', border: '#8a3545', glow: 'rgba(200,50,70,0.3)' },
+  weapon_new: { bg: '#4a3a10', border: '#8a7030', glow: 'rgba(200,170,30,0.3)' },
+  stat: { bg: '#0a2a3a', border: '#2a5a7a', glow: 'rgba(0,180,255,0.3)' },
+};
+
+const TYPE_ICON_BG: Record<string, string> = {
+  weapon_level: 'linear-gradient(180deg, #c83848 0%, #8a1828 100%)',
+  weapon_new: 'linear-gradient(180deg, #c8a020 0%, #8a6810 100%)',
+  stat: 'linear-gradient(180deg, #30a0d0 0%, #1a6090 100%)',
 };
 
 export const UpgradeSelect: React.FC<UpgradeSelectProps> = ({ options: upgrades, onSelect }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const handleSelect = (upgrade: Upgrade) => {
-    if (selectedId) return; // prevent double-tap
+    if (selectedId) return;
     setSelectedId(upgrade.id);
     setTimeout(() => onSelect(upgrade), 300);
   };
@@ -31,52 +37,78 @@ export const UpgradeSelect: React.FC<UpgradeSelectProps> = ({ options: upgrades,
         ...baseStyle,
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(0,0,0,0.55)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 20,
+        gap: 16,
         zIndex: 200,
         padding: '20px 16px',
       }}
     >
-      {/* Level up banner */}
-      <div style={{ textAlign: 'center' }}>
+      {/* ═══ LEVEL UP RIBBON BANNER ═══ */}
+      <div
+        style={{
+          position: 'relative',
+          padding: '10px 40px',
+          background: 'linear-gradient(180deg, #d83040 0%, #a81828 50%, #881020 100%)',
+          borderRadius: 6,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.15)',
+          border: '1.5px solid #e84858',
+        }}
+      >
+        {/* Glossy highlight */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 2,
+            left: 4,
+            right: 4,
+            height: '40%',
+            borderRadius: '4px 4px 0 0',
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 100%)',
+            pointerEvents: 'none',
+          }}
+        />
         <h2
           style={{
-            fontSize: 20,
-            color: '#ffd60a',
+            fontSize: 18,
+            color: '#fff',
             margin: 0,
-            textShadow: '0 0 20px #ffd60a66, 0 0 40px #ffd60a33',
-            letterSpacing: 4,
+            textShadow: '0 2px 4px rgba(0,0,0,0.5), 0 0 20px rgba(255,200,100,0.3)',
+            letterSpacing: 3,
           }}
         >
           LEVEL UP!
         </h2>
-        <p
-          style={{
-            fontSize: 8,
-            color: '#7a8fa0',
-            margin: '10px 0 0 0',
-          }}
-        >
-          Choose an upgrade:
-        </p>
       </div>
 
-      {/* Upgrade cards */}
+      <p
+        style={{
+          fontSize: 8,
+          color: '#c0c8d0',
+          margin: 0,
+          textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+        }}
+      >
+        Choose an upgrade:
+      </p>
+
+      {/* ═══ UPGRADE CARDS ═══ */}
       <div
         style={{
           display: 'flex',
-          flexDirection: 'column',
           gap: 10,
           width: '100%',
-          maxWidth: 320,
+          maxWidth: 400,
+          justifyContent: 'center',
+          flexWrap: 'wrap',
         }}
       >
         {upgrades.map((upgrade, index) => {
-          const borderColor = TYPE_BORDER_COLORS[upgrade.type] || '#00e5ff';
+          const colors = TYPE_COLORS[upgrade.type] || TYPE_COLORS.stat;
+          const iconBg = TYPE_ICON_BG[upgrade.type] || TYPE_ICON_BG.stat;
           const isSelected = selectedId === upgrade.id;
           const isFaded = selectedId !== null && !isSelected;
 
@@ -86,89 +118,124 @@ export const UpgradeSelect: React.FC<UpgradeSelectProps> = ({ options: upgrades,
               onClick={() => handleSelect(upgrade)}
               style={{
                 ...baseStyle,
-                width: '100%',
-                backgroundColor: '#1c2a3a',
-                border: `2px solid ${borderColor}`,
-                borderRadius: 8,
-                padding: '12px 14px',
+                width: 115,
+                background: `linear-gradient(180deg, ${colors.bg} 0%, ${colors.bg}dd 100%)`,
+                border: `2px solid ${colors.border}`,
+                borderRadius: 10,
+                padding: '14px 8px 12px',
                 cursor: 'pointer',
-                textAlign: 'left',
+                textAlign: 'center',
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
-                gap: 12,
+                gap: 8,
                 outline: 'none',
                 WebkitTapHighlightColor: 'transparent',
                 boxShadow: isSelected
-                  ? `0 0 20px ${borderColor}66, 0 0 40px ${borderColor}33`
-                  : `0 0 8px ${borderColor}22`,
-                opacity: isFaded ? 0.4 : 1,
-                transform: isSelected ? 'scale(1.03)' : 'translateY(0)',
+                  ? `0 0 20px ${colors.glow}, 0 4px 12px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.1)`
+                  : `0 4px 8px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.05)`,
+                opacity: isFaded ? 0.35 : 1,
+                transform: isSelected ? 'scale(1.05)' : 'translateY(0)',
                 transition: 'all 0.2s ease',
                 animation: `slideUp 0.3s ease ${index * 80}ms both`,
                 position: 'relative',
                 overflow: 'hidden',
               }}
             >
-              {/* Icon */}
+              {/* Card glossy top */}
               <div
                 style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: '50%',
-                  backgroundColor: upgrade.iconBg || borderColor,
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: '35%',
+                  borderRadius: '8px 8px 0 0',
+                  background: 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 100%)',
+                  pointerEvents: 'none',
+                }}
+              />
+
+              {/* Icon square */}
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 8,
+                  background: iconBg,
+                  border: '1.5px solid rgba(255,255,255,0.2)',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.15)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  flexShrink: 0,
-                  boxShadow: `0 0 8px ${borderColor}44`,
+                  position: 'relative',
                 }}
               >
-                <span style={{ fontSize: 14, color: '#fff' }}>
+                {/* Icon glossy */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 2,
+                    left: 3,
+                    right: 3,
+                    height: '40%',
+                    borderRadius: '6px 6px 0 0',
+                    background: 'linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0) 100%)',
+                    pointerEvents: 'none',
+                  }}
+                />
+                <span style={{ fontSize: 20, zIndex: 1, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.4))' }}>
                   {upgrade.icon}
                 </span>
               </div>
 
-              {/* Text */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-                <span
-                  style={{
-                    fontSize: 9,
-                    color: '#e8edf2',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  {upgrade.name}
-                  {upgrade.currentLevel != null && upgrade.maxLevel != null && (
-                    <span style={{ color: '#7a8fa0', fontWeight: 'normal' }}>
-                      {' '}Lv.{upgrade.currentLevel}/{upgrade.maxLevel}
-                    </span>
-                  )}
-                </span>
-                <span
-                  style={{
-                    fontSize: 7,
-                    color: '#7a8fa0',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {upgrade.description}
-                </span>
-              </div>
+              {/* Name */}
+              <span
+                style={{
+                  fontSize: 7,
+                  color: '#e8edf2',
+                  fontWeight: 'bold',
+                  lineHeight: 1.4,
+                  textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                }}
+              >
+                {upgrade.name}
+              </span>
 
-              {/* NEW tag for weapon_new */}
+              {/* Description */}
+              <span
+                style={{
+                  fontSize: 6,
+                  color: '#a0b0c0',
+                  lineHeight: 1.5,
+                  textShadow: '0 1px 1px rgba(0,0,0,0.4)',
+                }}
+              >
+                {upgrade.description}
+              </span>
+
+              {/* Level indicator */}
+              {upgrade.currentLevel != null && upgrade.maxLevel != null && (
+                <span style={{ fontSize: 6, color: '#80909f' }}>
+                  Lv.{upgrade.currentLevel}/{upgrade.maxLevel}
+                </span>
+              )}
+
+              {/* NEW tag */}
               {upgrade.type === 'weapon_new' && (
                 <span
                   style={{
                     position: 'absolute',
                     top: 6,
-                    right: 8,
-                    fontSize: 6,
-                    color: '#0f1923',
-                    backgroundColor: '#ffd60a',
+                    right: 6,
+                    fontSize: 5,
+                    color: '#2a1800',
+                    background: 'linear-gradient(180deg, #ffe040 0%, #e0a800 100%)',
                     padding: '2px 5px',
-                    borderRadius: 3,
+                    borderRadius: 4,
                     fontWeight: 'bold',
                     letterSpacing: 1,
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
                   }}
                 >
                   NEW
@@ -179,7 +246,6 @@ export const UpgradeSelect: React.FC<UpgradeSelectProps> = ({ options: upgrades,
         })}
       </div>
 
-      {/* Inline keyframes via style tag */}
       <style>{`
         @keyframes slideUp {
           from {

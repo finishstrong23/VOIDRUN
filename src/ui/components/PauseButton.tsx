@@ -9,11 +9,12 @@ export const PauseButton: React.FC<PauseButtonProps> = ({ onPause }) => {
     <button
       onClick={onPause}
       style={{
-        width: 44,
-        height: 44,
-        borderRadius: '50%',
-        backgroundColor: 'rgba(28,42,58,0.85)',
-        border: '1px solid rgba(45,74,94,0.4)',
+        width: 40,
+        height: 40,
+        borderRadius: 10,
+        background: 'linear-gradient(180deg, rgba(40,55,75,0.9) 0%, rgba(25,38,55,0.9) 100%)',
+        border: '1.5px solid rgba(60,85,110,0.5)',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.3), inset 0 1px 1px rgba(255,255,255,0.05)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -23,9 +24,9 @@ export const PauseButton: React.FC<PauseButtonProps> = ({ onPause }) => {
         WebkitTapHighlightColor: 'transparent',
       }}
     >
-      <svg width={16} height={16} viewBox="0 0 16 16">
-        <rect x={3} y={2} width={4} height={12} rx={1} fill="#e8edf2" />
-        <rect x={9} y={2} width={4} height={12} rx={1} fill="#e8edf2" />
+      <svg width={14} height={14} viewBox="0 0 14 14">
+        <rect x={2.5} y={1.5} width={3} height={11} rx={1} fill="#c0d0e0" />
+        <rect x={8.5} y={1.5} width={3} height={11} rx={1} fill="#c0d0e0" />
       </svg>
     </button>
   );
