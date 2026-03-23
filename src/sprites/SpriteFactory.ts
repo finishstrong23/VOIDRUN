@@ -1,6 +1,5 @@
 import { Graphics, Texture, type Renderer, RenderTexture, Container } from 'pixi.js';
 import { COLORS } from '../data/balance';
-import { assetLoader } from './AssetLoader';
 
 export class SpriteFactory {
   private textures: Map<string, Texture> = new Map();
@@ -9,8 +8,8 @@ export class SpriteFactory {
   async generateAll(renderer: Renderer): Promise<void> {
     this.renderer = renderer;
 
-    // Try loading external sprite assets first
-    await assetLoader.loadAll();
+    // Generate all procedural sprites
+    // External assets can be loaded later via AssetLoader when sprites exist
 
     // Player sprites (3 classes x animation frames)
     this.generatePlayerSprites(0x00e5ff, 'voidwalker');
@@ -46,14 +45,6 @@ export class SpriteFactory {
   }
 
   private cache(name: string, g: Graphics | Container, width: number, height: number): void {
-    // If an external asset was loaded for this key, use it instead of procedural
-    const loaded = assetLoader.get(name);
-    if (loaded) {
-      this.textures.set(name, loaded);
-      if (g instanceof Graphics) g.destroy();
-      return;
-    }
-
     const rt = RenderTexture.create({ width, height, resolution: 2 });
     if (g instanceof Container) {
       g.position.set(width / 2, height / 2);
