@@ -43,11 +43,11 @@ export class PixiRenderer {
     };
   }
 
-  async init(canvas: HTMLCanvasElement): Promise<void> {
+  async init(container: HTMLElement): Promise<void> {
     const dpr = getDevicePixelRatio();
 
+    // Pixi v8: pass the container element, let Pixi create its own canvas
     await this.app.init({
-      canvas,
       resizeTo: window,
       resolution: dpr,
       autoDensity: true,
@@ -55,6 +55,9 @@ export class PixiRenderer {
       antialias: false,
       powerPreference: 'high-performance',
     });
+
+    // Append Pixi's canvas to the container
+    container.appendChild(this.app.canvas);
 
     // Build layer hierarchy
     // World layers: ground through damageNumbers (move with camera)
@@ -78,7 +81,7 @@ export class PixiRenderer {
     this.resizeObserver = new ResizeObserver(() => {
       this.app.resize();
     });
-    this.resizeObserver.observe(canvas.parentElement || document.body);
+    this.resizeObserver.observe(container);
   }
 
   /**

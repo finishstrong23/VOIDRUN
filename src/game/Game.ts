@@ -107,7 +107,7 @@ export class Game {
   }
 
   async init(container: HTMLElement): Promise<void> {
-    await this.renderer.init(container as HTMLCanvasElement);
+    await this.renderer.init(container);
     this.layers = this.renderer.layers;
 
     // Generate all sprites

@@ -83,6 +83,11 @@ export const App: React.FC = () => {
       game.setOnBossDeath(() => {
         syncRunState({ activeBoss: null } as Parameters<typeof syncRunState>[0]);
       });
+    }).catch((err) => {
+      clearInterval(progressInterval);
+      console.error('[VOIDRUN] Game init failed:', err);
+      setLoadingProgress(1.0);
+      setTimeout(() => setScreen('title'), 500);
     });
 
     return () => {
