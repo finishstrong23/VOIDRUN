@@ -4,19 +4,13 @@ import { Assets, Texture, Spritesheet, type SpritesheetData } from 'pixi.js';
  * Loads external sprite assets (PNG spritesheets or individual PNGs).
  * Falls back gracefully — if assets aren't found, SpriteFactory uses procedural generation.
  *
- * Expected directory structure:
- *   public/sprites/
- *     player/         — player_voidwalker_idle_0.png, etc.
- *     enemies/        — enemy_grunt_0.png, etc.
- *     props/          — prop_crystal_24.png, etc.
- *     gems/           — gem_small.png, etc.
- *     effects/        — particle_00e5ff.png, etc.
- *     ui/             — joystick_outer.png, etc.
- *     ground/         — ground_tile.png
+ * Loading strategy:
+ *   1. Try loading a spritesheet at /sprites/spritesheet.json (fastest, single file)
+ *   2. Check for a manifest flag at /sprites/manifest.json listing available files
+ *   3. If neither exists, skip loading entirely (use procedural generation)
  *
- * OR use a single spritesheet:
- *   public/sprites/spritesheet.json  (TexturePacker / free-tex-packer format)
- *   public/sprites/spritesheet.png
+ * To enable individual PNG loading, create public/sprites/manifest.json:
+ *   { "files": ["player/player_voidwalker_idle_0.png", "enemies/enemy_grunt_0.png", ...] }
  */
 
 export interface SpriteManifestEntry {
@@ -95,31 +89,54 @@ class AssetLoader {
    */
   async loadAll(): Promise<void> {
     if (this.loaded) return;
+    this.loaded = true;
 
-    // Strategy 1: Try loading a combined spritesheet first
+    // Strategy 1: Try loading a combined spritesheet
     try {
-      const sheetData = await Assets.load<SpritesheetData>('/sprites/spritesheet.json');
-      if (sheetData && typeof sheetData === 'object' && 'textures' in sheetData) {
-        const sheet = sheetData as unknown as Spritesheet;
-        for (const [key, tex] of Object.entries(sheet.textures)) {
-          this.loadedTextures.set(key, tex as Texture);
+      const resp = await fetch('/sprites/spritesheet.json', { method: 'HEAD' });
+      if (resp.ok) {
+        const sheetData = await Assets.load<SpritesheetData>('/sprites/spritesheet.json');
+        if (sheetData && typeof sheetData === 'object' && 'textures' in sheetData) {
+          const sheet = sheetData as unknown as Spritesheet;
+          for (const [key, tex] of Object.entries(sheet.textures)) {
+            this.loadedTextures.set(key, tex as Texture);
+          }
+          console.log(`[AssetLoader] Loaded spritesheet with ${this.loadedTextures.size} textures`);
+          return;
         }
-        console.log(`[AssetLoader] Loaded spritesheet with ${this.loadedTextures.size} textures`);
-        this.loaded = true;
-        return;
       }
     } catch {
-      // No spritesheet — try individual files
+      // No spritesheet available
     }
 
-    // Strategy 2: Load individual PNGs from category folders
-    const results = await Promise.allSettled(
-      SPRITE_MANIFEST.map(async (entry) => {
-        const path = `/sprites/${entry.category}/${entry.key}.png`;
+    // Strategy 2: Check for a manifest listing available individual files
+    // Create public/sprites/manifest.json with { "files": ["player/player_voidwalker_idle_0.png", ...] }
+    let fileList: string[] = [];
+    try {
+      const resp = await fetch('/sprites/manifest.json');
+      if (resp.ok) {
+        const manifest = await resp.json();
+        if (manifest && Array.isArray(manifest.files)) {
+          fileList = manifest.files;
+        }
+      }
+    } catch {
+      // No manifest — skip individual loading entirely
+    }
+
+    if (fileList.length === 0) {
+      console.log('[AssetLoader] No sprite assets found — using procedural generation');
+      return;
+    }
+
+    // Load only the files listed in the manifest
+    await Promise.allSettled(
+      fileList.map(async (filePath: string) => {
+        const key = filePath.replace(/^.*\//, '').replace(/\.png$/, '');
         try {
-          const tex = await Assets.load<Texture>(path);
+          const tex = await Assets.load<Texture>(`/sprites/${filePath}`);
           if (tex && tex !== Texture.EMPTY) {
-            this.loadedTextures.set(entry.key, tex);
+            this.loadedTextures.set(key, tex);
           }
         } catch {
           // Missing file — will use procedural fallback
@@ -127,14 +144,7 @@ class AssetLoader {
       })
     );
 
-    const count = this.loadedTextures.size;
-    if (count > 0) {
-      console.log(`[AssetLoader] Loaded ${count}/${SPRITE_MANIFEST.length} sprite assets`);
-    } else {
-      console.log('[AssetLoader] No sprite assets found — using procedural generation');
-    }
-
-    this.loaded = true;
+    console.log(`[AssetLoader] Loaded ${this.loadedTextures.size}/${fileList.length} sprite assets`);
   }
 
   /**
