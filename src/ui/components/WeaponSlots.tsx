@@ -1,48 +1,55 @@
 import React from 'react';
+import type { EquippedWeapon } from '../hooks/useGameState';
 
-interface WeaponInfo {
-  id: string;
-  level: number;
-  name: string;
-}
-
-interface Props {
-  weapons: WeaponInfo[];
+interface WeaponSlotsProps {
+  weapons: EquippedWeapon[];
 }
 
 const WEAPON_COLORS: Record<string, string> = {
-  whipblade: '#a855f7',
-  voidOrbs: '#8b5cf6',
-  plasmaLance: '#22d3ee',
-  novaBlast: '#f97316',
-  chainLightning: '#60a5fa',
-  droneSwarm: '#3b82f6',
+  whipblade: '#00e5ff',
+  voidOrbs: '#bf5af2',
+  plasmaLance: '#00e5ff',
+  novaBlast: '#ff9f0a',
+  chainLightning: '#5e5ce6',
+  droneSwarm: '#00e5ff',
 };
 
-export const WeaponSlots: React.FC<Props> = ({ weapons }) => {
+const baseStyle: React.CSSProperties = {
+  fontFamily: "'Press Start 2P', monospace",
+};
+
+export const WeaponSlots: React.FC<WeaponSlotsProps> = ({ weapons }) => {
   return (
-    <div className="flex gap-1">
-      {weapons.map((w, i) => (
-        <div
-          key={i}
-          className="flex items-center justify-center rounded"
-          style={{
-            width: 28,
-            height: 28,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            border: `1px solid ${WEAPON_COLORS[w.id] || '#666'}`,
-            position: 'relative',
-          }}
-        >
-          <span style={{
-            fontSize: '7px',
-            color: WEAPON_COLORS[w.id] || '#fff',
-            fontFamily: "'Press Start 2P', monospace",
-          }}>
-            {w.level}
-          </span>
-        </div>
-      ))}
+    <div style={{ ...baseStyle, display: 'flex', gap: 4 }}>
+      {weapons.map((w) => {
+        const color = WEAPON_COLORS[w.id] || '#00e5ff';
+        return (
+          <div
+            key={w.id}
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 4,
+              backgroundColor: 'rgba(28,42,58,0.85)',
+              border: `2px solid ${color}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: `0 0 6px ${color}44`,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 8,
+                color,
+                textShadow: `0 0 4px ${color}88`,
+              }}
+            >
+              {w.level}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 };

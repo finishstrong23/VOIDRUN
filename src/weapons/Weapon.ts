@@ -8,7 +8,6 @@ export abstract class Weapon {
   level = 1;
   maxLevel = 5;
   cooldownTimer = 0;
-  hitTracker: Set<number> = new Set();
 
   constructor(id: string, name: string) {
     this.id = id;
@@ -19,19 +18,13 @@ export abstract class Weapon {
   abstract fire(player: Player, enemies: Enemy[], game: Game): void;
 
   update(dt: number, player: Player, enemies: Enemy[], game: Game): void {
-    const cd = this.getCooldown(player);
-    if (cd <= 0) return; // Passive weapons like orbs
-
-    this.cooldownTimer -= dt;
-    if (this.cooldownTimer <= 0) {
-      this.cooldownTimer = cd;
-      this.hitTracker.clear();
-      this.fire(player, enemies, game);
+    if (this.cooldownTimer > 0) {
+      this.cooldownTimer -= dt;
     }
-  }
-
-  getCooldownProgress(): number {
-    return 0;
+    if (this.cooldownTimer <= 0) {
+      this.fire(player, enemies, game);
+      this.cooldownTimer = this.getCooldown(player);
+    }
   }
 
   levelUp(): void {
@@ -45,12 +38,11 @@ export abstract class Weapon {
   }
 
   getLevelDescription(): string {
-    return `Lv.${this.level}`;
+    return `${this.name} Lv.${this.level}`;
   }
 
   reset(): void {
     this.level = 1;
     this.cooldownTimer = 0;
-    this.hitTracker.clear();
   }
 }

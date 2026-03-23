@@ -1,80 +1,138 @@
 import React from 'react';
 import { useGameState } from '../hooks/useGameState';
 
+const baseStyle: React.CSSProperties = {
+  fontFamily: "'Press Start 2P', monospace",
+};
+
+const buttonBase: React.CSSProperties = {
+  ...baseStyle,
+  padding: '14px 32px',
+  borderRadius: 6,
+  cursor: 'pointer',
+  fontSize: 12,
+  letterSpacing: 1,
+  outline: 'none',
+  WebkitTapHighlightColor: 'transparent',
+  width: '100%',
+  maxWidth: 240,
+};
+
 export const TitleScreen: React.FC = () => {
-  const { setScreen, highScore } = useGameState();
+  const { highScore, setScreen } = useGameState();
+
+  const onPlay = () => setScreen('class_select');
+  const onStats = () => setScreen('stats');
+  const onSettings = () => setScreen('settings');
 
   return (
-    <div className="flex flex-col items-center justify-center h-full"
-      style={{ fontFamily: "'Press Start 2P', monospace" }}>
-      <h1 style={{
-        fontSize: '32px',
-        color: '#8b5cf6',
-        textShadow: '0 0 20px rgba(139, 92, 246, 0.5)',
-        marginBottom: 8,
-      }}>
+    <div
+      style={{
+        ...baseStyle,
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: '#0f1923',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 16,
+        zIndex: 900,
+      }}
+    >
+      {/* Atmospheric gradient overlay */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'radial-gradient(ellipse at 50% 30%, rgba(0,229,255,0.06) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* Title */}
+      <h1
+        style={{
+          fontSize: 36,
+          color: '#00e5ff',
+          textShadow: '0 0 20px #00e5ff88, 0 0 40px #00e5ff44, 0 0 80px #00e5ff22',
+          margin: 0,
+          letterSpacing: 8,
+          zIndex: 1,
+        }}
+      >
         VOIDRUN
       </h1>
-      <p style={{ fontSize: '8px', color: '#666', marginBottom: 48 }}>
+
+      {/* Subtitle */}
+      <p
+        style={{
+          fontSize: 8,
+          color: '#7a8fa0',
+          margin: '0 0 24px 0',
+          letterSpacing: 3,
+          textTransform: 'uppercase',
+          zIndex: 1,
+        }}
+      >
         Survive the void
       </p>
 
+      {/* High score */}
+      {highScore > 0 && (
+        <p
+          style={{
+            fontSize: 8,
+            color: '#ffd60a',
+            margin: '0 0 8px 0',
+            textShadow: '0 0 8px #ffd60a44',
+            zIndex: 1,
+          }}
+        >
+          HIGH SCORE: {highScore.toLocaleString()}
+        </p>
+      )}
+
+      {/* Buttons */}
       <button
-        onClick={() => setScreen('class_select')}
-        className="rounded px-6 py-3 mb-4"
+        onClick={onPlay}
         style={{
-          backgroundColor: '#8b5cf6',
-          color: '#fff',
-          fontSize: '12px',
+          ...buttonBase,
+          backgroundColor: '#00e5ff',
+          color: '#0f1923',
           border: 'none',
-          cursor: 'pointer',
-          fontFamily: "'Press Start 2P', monospace",
-          touchAction: 'manipulation',
+          boxShadow: '0 0 16px #00e5ff44, 0 4px 12px rgba(0,0,0,0.3)',
+          zIndex: 1,
         }}
       >
         PLAY
       </button>
 
-      <div className="flex gap-4 mt-6">
-        <button
-          onClick={() => setScreen('stats')}
-          style={{
-            backgroundColor: 'transparent',
-            color: '#888',
-            fontSize: '8px',
-            border: '1px solid #333',
-            padding: '8px 16px',
-            cursor: 'pointer',
-            fontFamily: "'Press Start 2P', monospace",
-            borderRadius: 4,
-            touchAction: 'manipulation',
-          }}
-        >
-          STATS
-        </button>
-        <button
-          onClick={() => setScreen('settings')}
-          style={{
-            backgroundColor: 'transparent',
-            color: '#888',
-            fontSize: '8px',
-            border: '1px solid #333',
-            padding: '8px 16px',
-            cursor: 'pointer',
-            fontFamily: "'Press Start 2P', monospace",
-            borderRadius: 4,
-            touchAction: 'manipulation',
-          }}
-        >
-          SETTINGS
-        </button>
-      </div>
+      <button
+        onClick={onStats}
+        style={{
+          ...buttonBase,
+          backgroundColor: 'transparent',
+          color: '#e8edf2',
+          border: '1px solid rgba(45,74,94,0.6)',
+          zIndex: 1,
+        }}
+      >
+        STATS
+      </button>
 
-      {highScore > 0 && (
-        <p style={{ fontSize: '8px', color: '#eab308', marginTop: 32 }}>
-          HIGH SCORE: {highScore}
-        </p>
-      )}
+      <button
+        onClick={onSettings}
+        style={{
+          ...buttonBase,
+          backgroundColor: 'transparent',
+          color: '#e8edf2',
+          border: '1px solid rgba(45,74,94,0.6)',
+          zIndex: 1,
+        }}
+      >
+        SETTINGS
+      </button>
     </div>
   );
 };

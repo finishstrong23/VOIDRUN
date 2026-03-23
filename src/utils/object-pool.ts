@@ -7,15 +7,12 @@ export class ObjectPool<T> {
   constructor(factory: () => T, reset: (obj: T) => void, initialSize: number) {
     this.factory = factory;
     this.resetFn = reset;
-    for (let i = 0; i < initialSize; i++) {
-      this.pool.push(factory());
-    }
+    for (let i = 0; i < initialSize; i++) this.pool.push(factory());
   }
 
   acquire(): T {
     this.activeCount++;
-    if (this.pool.length > 0) return this.pool.pop()!;
-    return this.factory();
+    return this.pool.length > 0 ? this.pool.pop()! : this.factory();
   }
 
   release(obj: T): void {

@@ -1,28 +1,65 @@
 import React from 'react';
 
-interface Props {
+interface BossHealthBarProps {
   name: string;
   hp: number;
   maxHP: number;
 }
 
-export const BossHealthBar: React.FC<Props> = ({ name, hp, maxHP }) => {
-  const pct = Math.max(0, Math.min(100, (hp / maxHP) * 100));
+const baseStyle: React.CSSProperties = {
+  fontFamily: "'Press Start 2P', monospace",
+};
+
+export const BossHealthBar: React.FC<BossHealthBarProps> = ({ name, hp, maxHP }) => {
+  const pct = Math.max(0, Math.min(1, hp / maxHP)) * 100;
 
   return (
-    <div className="flex flex-col items-center mt-1" style={{ width: '70%', margin: '0 auto' }}>
-      <span style={{
-        fontSize: '8px',
-        color: '#ef4444',
-        fontFamily: "'Press Start 2P', monospace",
-        marginBottom: 2,
-      }}>
+    <div
+      style={{
+        ...baseStyle,
+        width: '70%',
+        position: 'absolute',
+        top: 52,
+        left: '15%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 4,
+        zIndex: 20,
+      }}
+    >
+      <span
+        style={{
+          fontSize: 9,
+          color: '#ff2d55',
+          textShadow: '0 0 8px #ff2d5588, 0 0 16px #ff2d5544',
+          letterSpacing: 2,
+          textTransform: 'uppercase',
+        }}
+      >
         {name}
       </span>
-      <div className="relative w-full h-3 rounded" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
+      <div
+        style={{
+          width: '100%',
+          height: 14,
+          backgroundColor: 'rgba(28,42,58,0.85)',
+          borderRadius: 4,
+          border: '1px solid #ff2d55',
+          boxShadow: '0 0 10px #ff2d5533, inset 0 0 6px #ff2d5522',
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+      >
         <div
-          className="h-full rounded transition-all duration-200"
-          style={{ width: `${pct}%`, backgroundColor: '#ef4444' }}
+          style={{
+            width: `${pct}%`,
+            height: '100%',
+            background: 'linear-gradient(90deg, #ff2d55, #ff6b6b)',
+            borderRadius: 3,
+            transition: 'width 0.2s ease',
+            boxShadow: '0 0 8px #ff2d5566',
+          }}
         />
       </div>
     </div>

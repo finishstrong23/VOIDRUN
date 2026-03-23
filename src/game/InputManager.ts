@@ -1,66 +1,95 @@
 export class InputManager {
-  keys: Set<string> = new Set();
+  readonly keys = new Set<string>();
   moveX = 0;
   moveY = 0;
 
-  init(): void {
-    // Prevent browser gestures
-    document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
-    document.addEventListener('dblclick', (e) => e.preventDefault());
-    document.addEventListener('contextmenu', (e) => e.preventDefault());
-    document.addEventListener('gesturestart', (e) => e.preventDefault());
-    document.addEventListener('gesturechange', (e) => e.preventDefault());
+  private joystickX = 0;
+  private joystickY = 0;
+  private escapePressed = false;
 
-    // Keyboard
-    window.addEventListener('keydown', (e) => {
-      this.keys.add(e.key.toLowerCase());
+  private onKeyDown = (e: KeyboardEvent): void => {
+    this.keys.add(e.code);
+    if (e.code === 'Escape') this.escapePressed = true;
+  };
+
+  private onKeyUp = (e: KeyboardEvent): void => {
+    this.keys.delete(e.code);
+  };
+
+  init(): void {
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
+
+    // Prevent default browser gestures on the game canvas
+    document.addEventListener('touchmove', (e: TouchEvent) => {
+      e.preventDefault();
+    }, { passive: false });
+
+    document.addEventListener('dblclick', (e: Event) => {
+      e.preventDefault();
     });
-    window.addEventListener('keyup', (e) => {
-      this.keys.delete(e.key.toLowerCase());
+
+    document.addEventListener('contextmenu', (e: Event) => {
+      e.preventDefault();
+    });
+
+    // Safari gesture events
+    document.addEventListener('gesturestart', (e: Event) => {
+      e.preventDefault();
+    });
+
+    document.addEventListener('gesturechange', (e: Event) => {
+      e.preventDefault();
     });
   }
 
+  destroy(): void {
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
+  }
+
   update(): void {
-    // WASD / Arrow keys
+    // Determine keyboard input
     let kx = 0;
     let ky = 0;
-    if (this.keys.has('w') || this.keys.has('arrowup')) ky -= 1;
-    if (this.keys.has('s') || this.keys.has('arrowdown')) ky += 1;
-    if (this.keys.has('a') || this.keys.has('arrowleft')) kx -= 1;
-    if (this.keys.has('d') || this.keys.has('arrowright')) kx += 1;
 
-    // Normalize diagonal
-    if (kx !== 0 && ky !== 0) {
-      const inv = 1 / Math.SQRT2;
-      kx *= inv;
-      ky *= inv;
-    }
+    if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) ky -= 1;
+    if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) ky += 1;
+    if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) kx -= 1;
+    if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) kx += 1;
 
-    // Keyboard overrides joystick only if keys are pressed
-    if (kx !== 0 || ky !== 0) {
+    const hasKeyboardInput = kx !== 0 || ky !== 0;
+
+    if (hasKeyboardInput) {
+      // Normalize diagonal movement
+      if (kx !== 0 && ky !== 0) {
+        const inv = 1 / Math.SQRT2;
+        kx *= inv;
+        ky *= inv;
+      }
       this.moveX = kx;
       this.moveY = ky;
+    } else {
+      // Fall back to joystick input
+      this.moveX = this.joystickX;
+      this.moveY = this.joystickY;
     }
   }
 
   setJoystickInput(x: number, y: number): void {
-    // Only use joystick when no keyboard movement
-    if (!this.keys.has('w') && !this.keys.has('s') && !this.keys.has('a') && !this.keys.has('d') &&
-        !this.keys.has('arrowup') && !this.keys.has('arrowdown') && !this.keys.has('arrowleft') && !this.keys.has('arrowright')) {
-      this.moveX = x;
-      this.moveY = y;
-    }
+    this.joystickX = x;
+    this.joystickY = y;
   }
 
   isEscapePressed(): boolean {
-    return this.keys.has('escape');
+    return this.escapePressed;
   }
 
-  consumeEscape(): void {
-    this.keys.delete('escape');
-  }
-
-  destroy(): void {
-    this.keys.clear();
+  consumeEscape(): boolean {
+    if (this.escapePressed) {
+      this.escapePressed = false;
+      return true;
+    }
+    return false;
   }
 }

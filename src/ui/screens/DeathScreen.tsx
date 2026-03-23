@@ -1,82 +1,168 @@
 import React from 'react';
 import { useGameState } from '../hooks/useGameState';
 
-interface Props {
+export interface DeathScreenProps {
   onPlayAgain: () => void;
   onMenu: () => void;
 }
 
+const baseStyle: React.CSSProperties = {
+  fontFamily: "'Press Start 2P', monospace",
+};
+
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export const DeathScreen: React.FC<Props> = ({ onPlayAgain, onMenu }) => {
-  const { score, runTime, killCount, bossKills, playerLevel, highScore } = useGameState();
-  const isNewHigh = score >= highScore && score > 0;
+const buttonBase: React.CSSProperties = {
+  ...baseStyle,
+  width: '100%',
+  maxWidth: 240,
+  padding: '12px 24px',
+  borderRadius: 6,
+  cursor: 'pointer',
+  fontSize: 10,
+  letterSpacing: 1,
+  outline: 'none',
+  WebkitTapHighlightColor: 'transparent',
+};
+
+export const DeathScreen: React.FC<DeathScreenProps> = ({
+  onPlayAgain,
+  onMenu,
+}) => {
+  const {
+    score,
+    runTime,
+    currentWave,
+    killCount,
+    bossKills,
+    playerLevel,
+    highScore,
+  } = useGameState();
+
+  const isHighScore = score >= highScore && score > 0;
+
+  const stats = [
+    { label: 'SCORE', value: score.toLocaleString() },
+    { label: 'TIME', value: formatTime(runTime) },
+    { label: 'WAVE', value: String(currentWave) },
+    { label: 'KILLS', value: String(killCount) },
+    { label: 'BOSSES', value: String(bossKills) },
+    { label: 'LEVEL', value: String(playerLevel) },
+  ];
 
   return (
-    <div className="flex flex-col items-center justify-center h-full p-4"
+    <div
       style={{
-        backgroundColor: 'rgba(0,0,0,0.8)',
-        fontFamily: "'Press Start 2P', monospace",
-        animation: 'fadeIn 0.5s ease-out',
-      }}>
-      <h2 style={{ fontSize: '16px', color: '#ef4444', marginBottom: 8 }}>
+        ...baseStyle,
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 16,
+        zIndex: 400,
+        padding: '20px 16px',
+      }}
+    >
+      {/* YOU DIED */}
+      <h2
+        style={{
+          fontSize: 24,
+          color: '#ff2d55',
+          margin: 0,
+          textShadow: '0 0 20px #ff2d5566, 0 0 40px #ff2d5533',
+          letterSpacing: 4,
+        }}
+      >
         YOU DIED
       </h2>
 
-      {isNewHigh && (
-        <p style={{ fontSize: '10px', color: '#eab308', marginBottom: 16 }}>
+      {/* High score */}
+      {isHighScore && (
+        <p
+          style={{
+            fontSize: 10,
+            color: '#ffd60a',
+            margin: 0,
+            textShadow: '0 0 12px #ffd60a66',
+            letterSpacing: 2,
+          }}
+        >
           NEW HIGH SCORE!
         </p>
       )}
 
-      <div className="rounded p-4 mb-6" style={{
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        border: '1px solid #333',
-        minWidth: 240,
-      }}>
-        <div className="flex justify-between mb-2">
-          <span style={{ fontSize: '8px', color: '#888' }}>Score</span>
-          <span style={{ fontSize: '10px', color: '#eab308' }}>{score}</span>
-        </div>
-        <div className="flex justify-between mb-2">
-          <span style={{ fontSize: '8px', color: '#888' }}>Time</span>
-          <span style={{ fontSize: '10px', color: '#fff' }}>{formatTime(runTime)}</span>
-        </div>
-        <div className="flex justify-between mb-2">
-          <span style={{ fontSize: '8px', color: '#888' }}>Kills</span>
-          <span style={{ fontSize: '10px', color: '#ef4444' }}>{killCount}</span>
-        </div>
-        <div className="flex justify-between mb-2">
-          <span style={{ fontSize: '8px', color: '#888' }}>Bosses</span>
-          <span style={{ fontSize: '10px', color: '#a855f7' }}>{bossKills}</span>
-        </div>
-        <div className="flex justify-between">
-          <span style={{ fontSize: '8px', color: '#888' }}>Level</span>
-          <span style={{ fontSize: '10px', color: '#60a5fa' }}>{playerLevel}</span>
-        </div>
+      {/* Stats panel */}
+      <div
+        style={{
+          backgroundColor: 'rgba(28,42,58,0.85)',
+          border: '1px solid rgba(45,74,94,0.4)',
+          borderRadius: 8,
+          padding: '16px 20px',
+          width: '100%',
+          maxWidth: 280,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+        }}
+      >
+        {stats.map((stat) => (
+          <div
+            key={stat.label}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <span style={{ fontSize: 8, color: '#7a8fa0' }}>{stat.label}</span>
+            <span style={{ fontSize: 10, color: '#e8edf2' }}>{stat.value}</span>
+          </div>
+        ))}
       </div>
 
-      <div className="flex flex-col gap-3" style={{ minWidth: 200 }}>
-        <button onClick={onPlayAgain} className="rounded px-6 py-3"
-          style={{ backgroundColor: '#8b5cf6', color: '#fff', fontSize: '10px', border: 'none', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace", touchAction: 'manipulation' }}>
+      {/* Buttons */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          alignItems: 'center',
+          marginTop: 8,
+          width: '100%',
+        }}
+      >
+        <button
+          onClick={onPlayAgain}
+          style={{
+            ...buttonBase,
+            backgroundColor: '#00e5ff',
+            color: '#0f1923',
+            border: 'none',
+            boxShadow: '0 0 12px #00e5ff44',
+          }}
+        >
           PLAY AGAIN
         </button>
-        <button onClick={onMenu} className="rounded px-6 py-3"
-          style={{ backgroundColor: 'transparent', color: '#aaa', fontSize: '10px', border: '1px solid #444', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace", touchAction: 'manipulation' }}>
+
+        <button
+          onClick={onMenu}
+          style={{
+            ...buttonBase,
+            backgroundColor: 'transparent',
+            color: '#e8edf2',
+            border: '1px solid rgba(45,74,94,0.6)',
+          }}
+        >
           MENU
         </button>
       </div>
-
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </div>
   );
 };

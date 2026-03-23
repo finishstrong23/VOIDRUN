@@ -1,33 +1,92 @@
 import React from 'react';
 
-interface Props {
+interface PauseMenuProps {
   onResume: () => void;
-  onQuit: () => void;
   onSettings: () => void;
+  onQuit: () => void;
 }
 
-export const PauseMenu: React.FC<Props> = ({ onResume, onQuit, onSettings }) => {
+const baseStyle: React.CSSProperties = {
+  fontFamily: "'Press Start 2P', monospace",
+};
+
+const buttonBase: React.CSSProperties = {
+  ...baseStyle,
+  width: '100%',
+  maxWidth: 240,
+  padding: '12px 24px',
+  borderRadius: 6,
+  cursor: 'pointer',
+  fontSize: 10,
+  letterSpacing: 1,
+  outline: 'none',
+  WebkitTapHighlightColor: 'transparent',
+};
+
+export const PauseMenu: React.FC<PauseMenuProps> = ({ onResume, onSettings, onQuit }) => {
   return (
-    <div className="flex flex-col items-center justify-center h-full"
-      style={{ backgroundColor: 'rgba(0,0,0,0.7)', fontFamily: "'Press Start 2P', monospace" }}>
-      <h2 style={{ fontSize: '16px', color: '#fff', marginBottom: 32 }}>
+    <div
+      style={{
+        ...baseStyle,
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 16,
+        zIndex: 300,
+      }}
+    >
+      <h2
+        style={{
+          fontSize: 20,
+          color: '#e8edf2',
+          margin: '0 0 20px 0',
+          letterSpacing: 4,
+          textShadow: '0 0 10px rgba(0,229,255,0.3)',
+        }}
+      >
         PAUSED
       </h2>
 
-      <div className="flex flex-col gap-3" style={{ minWidth: 200 }}>
-        <button onClick={onResume} className="rounded px-6 py-3"
-          style={{ backgroundColor: '#8b5cf6', color: '#fff', fontSize: '10px', border: 'none', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace", touchAction: 'manipulation' }}>
-          RESUME
-        </button>
-        <button onClick={onSettings} className="rounded px-6 py-3"
-          style={{ backgroundColor: 'transparent', color: '#aaa', fontSize: '10px', border: '1px solid #444', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace", touchAction: 'manipulation' }}>
-          SETTINGS
-        </button>
-        <button onClick={onQuit} className="rounded px-6 py-3"
-          style={{ backgroundColor: 'transparent', color: '#ef4444', fontSize: '10px', border: '1px solid #ef4444', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace", touchAction: 'manipulation' }}>
-          QUIT RUN
-        </button>
-      </div>
+      <button
+        onClick={onResume}
+        style={{
+          ...buttonBase,
+          backgroundColor: '#00e5ff',
+          color: '#0f1923',
+          border: 'none',
+          boxShadow: '0 0 12px #00e5ff44',
+        }}
+      >
+        RESUME
+      </button>
+
+      <button
+        onClick={onSettings}
+        style={{
+          ...buttonBase,
+          backgroundColor: 'transparent',
+          color: '#e8edf2',
+          border: '1px solid rgba(45,74,94,0.6)',
+        }}
+      >
+        SETTINGS
+      </button>
+
+      <button
+        onClick={onQuit}
+        style={{
+          ...buttonBase,
+          backgroundColor: 'transparent',
+          color: '#ff2d55',
+          border: '1px solid rgba(255,45,85,0.4)',
+        }}
+      >
+        QUIT RUN
+      </button>
     </div>
   );
 };

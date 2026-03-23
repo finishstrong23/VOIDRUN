@@ -1,144 +1,129 @@
-import { Graphics, Container } from 'pixi.js';
-import { clamp } from '../utils/math';
+import { Sprite, Container } from 'pixi.js';
+import { spriteFactory } from '../sprites/SpriteFactory';
 
 const DEAD_ZONE = 12;
 const MAX_RADIUS = 60;
-const LEFT_ZONE_PERCENT = 0.6;
+const FADE_DURATION = 200; // ms
 
 export class TouchJoystick {
-  private container: Container;
-  private outerRing: Graphics;
-  private innerThumb: Graphics;
-  private active = false;
-  private touchId: number | null = null;
-  private originX = 0;
-  private originY = 0;
-  private screenWidth = 0;
-  private screenHeight = 0;
-  private fadeTimer = 0;
-  private isMobile: boolean;
-
-  // Output
   inputX = 0;
   inputY = 0;
 
-  constructor(layer: Container, isMobile: boolean) {
-    this.isMobile = isMobile;
+  private container: Container;
+  private outer: Sprite;
+  private inner: Sprite;
+
+  private originX = 0;
+  private originY = 0;
+  private activeId: number | null = null;
+  private isActive = false;
+  private fadeTimer = 0;
+
+  private screenWidth = 0;
+  private screenHeight = 0;
+
+  constructor(parentContainer: Container) {
     this.container = new Container();
-    this.container.visible = false;
-    layer.addChild(this.container);
+    this.container.alpha = 0;
 
-    // Outer ring
-    this.outerRing = new Graphics();
-    this.outerRing.circle(0, 0, MAX_RADIUS);
-    this.outerRing.stroke({ color: 0xffffff, width: 2, alpha: 0.2 });
-    this.container.addChild(this.outerRing);
+    this.outer = new Sprite(spriteFactory.get('joystick_outer'));
+    this.outer.anchor.set(0.5);
+    this.container.addChild(this.outer);
 
-    // Inner thumb
-    this.innerThumb = new Graphics();
-    this.innerThumb.circle(0, 0, 24);
-    this.innerThumb.fill({ color: 0xffffff, alpha: 0.4 });
-    this.container.addChild(this.innerThumb);
+    this.inner = new Sprite(spriteFactory.get('joystick_inner'));
+    this.inner.anchor.set(0.5);
+    this.container.addChild(this.inner);
+
+    parentContainer.addChild(this.container);
   }
 
-  init(canvas: HTMLCanvasElement): void {
-    if (!this.isMobile) return;
-
-    this.screenWidth = window.innerWidth;
-    this.screenHeight = window.innerHeight;
-
-    canvas.addEventListener('touchstart', this.onTouchStart, { passive: false });
-    canvas.addEventListener('touchmove', this.onTouchMove, { passive: false });
-    canvas.addEventListener('touchend', this.onTouchEnd, { passive: false });
-    canvas.addEventListener('touchcancel', this.onTouchEnd, { passive: false });
-  }
-
-  private onTouchStart = (e: TouchEvent): void => {
-    e.preventDefault();
-    if (this.touchId !== null) return; // Already tracking a touch
-
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      const touch = e.changedTouches[i];
-      // Only accept touches in the left zone
-      if (touch.clientX < this.screenWidth * LEFT_ZONE_PERCENT) {
-        this.touchId = touch.identifier;
-        this.originX = touch.clientX;
-        this.originY = touch.clientY;
-        this.active = true;
-        this.container.visible = true;
-        this.container.alpha = 1;
-        this.container.position.set(this.originX, this.originY);
-        this.innerThumb.position.set(0, 0);
-        this.fadeTimer = 0;
-        break;
-      }
-    }
-  };
-
-  private onTouchMove = (e: TouchEvent): void => {
-    e.preventDefault();
-    if (this.touchId === null) return;
-
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      const touch = e.changedTouches[i];
-      if (touch.identifier === this.touchId) {
-        const dx = touch.clientX - this.originX;
-        const dy = touch.clientY - this.originY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist < DEAD_ZONE) {
-          this.inputX = 0;
-          this.inputY = 0;
-          this.innerThumb.position.set(dx, dy);
-        } else {
-          const clampedDist = Math.min(dist, MAX_RADIUS);
-          const angle = Math.atan2(dy, dx);
-          const magnitude = (clampedDist - DEAD_ZONE) / (MAX_RADIUS - DEAD_ZONE);
-
-          this.inputX = Math.cos(angle) * magnitude;
-          this.inputY = Math.sin(angle) * magnitude;
-
-          this.innerThumb.position.set(
-            Math.cos(angle) * clampedDist,
-            Math.sin(angle) * clampedDist
-          );
-        }
-        break;
-      }
-    }
-  };
-
-  private onTouchEnd = (e: TouchEvent): void => {
-    if (this.touchId === null) return;
-
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      if (e.changedTouches[i].identifier === this.touchId) {
-        this.touchId = null;
-        this.active = false;
-        this.inputX = 0;
-        this.inputY = 0;
-        this.fadeTimer = 0.2; // 200ms fade out
-        break;
-      }
-    }
-  };
-
-  update(dt: number): void {
-    if (this.fadeTimer > 0) {
-      this.fadeTimer -= dt;
-      this.container.alpha = Math.max(0, this.fadeTimer / 0.2);
-      if (this.fadeTimer <= 0) {
-        this.container.visible = false;
-      }
-    }
-  }
-
-  updateBounds(width: number, height: number): void {
+  resize(width: number, height: number): void {
     this.screenWidth = width;
     this.screenHeight = height;
   }
 
+  onTouchStart(e: TouchEvent): void {
+    if (this.activeId !== null) return;
+
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      // Only activate in left 60% of screen
+      if (touch.clientX < this.screenWidth * 0.6) {
+        this.activeId = touch.identifier;
+        this.originX = touch.clientX;
+        this.originY = touch.clientY;
+        this.isActive = true;
+        this.fadeTimer = 0;
+
+        this.container.alpha = 0.8;
+        this.container.position.set(this.originX, this.originY);
+        this.inner.position.set(0, 0);
+        break;
+      }
+    }
+  }
+
+  onTouchMove(e: TouchEvent): void {
+    if (this.activeId === null) return;
+
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      if (touch.identifier !== this.activeId) continue;
+
+      const dx = touch.clientX - this.originX;
+      const dy = touch.clientY - this.originY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < DEAD_ZONE) {
+        this.inputX = 0;
+        this.inputY = 0;
+        this.inner.position.set(dx, dy);
+      } else {
+        // Clamp to max radius
+        const clampedDist = Math.min(dist, MAX_RADIUS);
+        const nx = dx / dist;
+        const ny = dy / dist;
+
+        // Analog output: ramp from 0 at dead zone to 1 at max radius
+        const analog = (clampedDist - DEAD_ZONE) / (MAX_RADIUS - DEAD_ZONE);
+        this.inputX = nx * analog;
+        this.inputY = ny * analog;
+
+        this.inner.position.set(nx * clampedDist, ny * clampedDist);
+      }
+      break;
+    }
+  }
+
+  onTouchEnd(e: TouchEvent): void {
+    if (this.activeId === null) return;
+
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      if (touch.identifier !== this.activeId) continue;
+
+      this.activeId = null;
+      this.isActive = false;
+      this.fadeTimer = FADE_DURATION;
+      this.inputX = 0;
+      this.inputY = 0;
+      this.inner.position.set(0, 0);
+      break;
+    }
+  }
+
+  update(dt: number): void {
+    if (!this.isActive && this.fadeTimer > 0) {
+      this.fadeTimer -= dt * 1000;
+      this.container.alpha = Math.max(0, (this.fadeTimer / FADE_DURATION) * 0.8);
+      if (this.fadeTimer <= 0) {
+        this.container.alpha = 0;
+      }
+    }
+  }
+
   destroy(): void {
     this.container.removeFromParent();
+    this.container.destroy({ children: true });
   }
 }

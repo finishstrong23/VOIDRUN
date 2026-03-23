@@ -1,113 +1,170 @@
 import React from 'react';
+import type { QualityTier } from '../../types';
 import { useGameState } from '../hooks/useGameState';
 import { setMasterVolume, setSfxEnabled } from '../../utils/sound';
 
-interface Props {
+interface SettingsScreenProps {
   onBack: () => void;
 }
 
-export const SettingsScreen: React.FC<Props> = ({ onBack }) => {
-  const {
-    masterVolume, sfxEnabled, qualityOverride,
-    setVolume, setSfxEnabled: setSfx, setQualityOverride,
-  } = useGameState();
+const baseStyle: React.CSSProperties = {
+  fontFamily: "'Press Start 2P', monospace",
+};
 
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const vol = parseFloat(e.target.value);
-    setVolume(vol);
-    setMasterVolume(vol);
-  };
+const QUALITY_OPTIONS: Array<{ value: QualityTier | 'auto'; label: string }> = [
+  { value: 'auto', label: 'AUTO' },
+  { value: 'low', label: 'LOW' },
+  { value: 'medium', label: 'MED' },
+  { value: 'high', label: 'HIGH' },
+];
 
-  const handleSfxToggle = () => {
-    setSfx(!sfxEnabled);
-    setSfxEnabled(!sfxEnabled);
-  };
-
+export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
+  const { masterVolume, sfxEnabled, qualityOverride, setVolume, setSfxEnabled: setSfx, setQualityOverride } = useGameState();
+  const onVolumeChange = (v: number) => { setVolume(v); setMasterVolume(v); };
+  const onSfxToggle = (e: boolean) => { setSfx(e); setSfxEnabled(e); };
+  const onQualityChange = (q: QualityTier | 'auto') => setQualityOverride(q);
   return (
-    <div className="flex flex-col items-center justify-center h-full p-4"
-      style={{ fontFamily: "'Press Start 2P', monospace" }}>
-      <h2 style={{ fontSize: '14px', color: '#fff', marginBottom: 32 }}>
+    <div
+      style={{
+        ...baseStyle,
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: '#0f1923',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        padding: '40px 16px',
+        gap: 20,
+        zIndex: 900,
+        overflowY: 'auto',
+      }}
+    >
+      <h2
+        style={{
+          fontSize: 16,
+          color: '#e8edf2',
+          margin: 0,
+          letterSpacing: 3,
+        }}
+      >
         SETTINGS
       </h2>
 
-      <div className="flex flex-col gap-6 w-full" style={{ maxWidth: 300 }}>
-        {/* Volume */}
-        <div>
-          <label style={{ fontSize: '8px', color: '#888', display: 'block', marginBottom: 8 }}>
-            VOLUME: {Math.round(masterVolume * 100)}%
-          </label>
+      {/* Settings panel */}
+      <div
+        style={{
+          backgroundColor: 'rgba(28,42,58,0.85)',
+          border: '1px solid rgba(45,74,94,0.4)',
+          borderRadius: 8,
+          padding: '20px',
+          width: '100%',
+          maxWidth: 320,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 24,
+        }}
+      >
+        {/* Volume slider */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 8, color: '#e8edf2' }}>VOLUME</span>
+            <span style={{ fontSize: 8, color: '#00e5ff' }}>
+              {Math.round(masterVolume * 100)}%
+            </span>
+          </div>
           <input
             type="range"
-            min="0"
-            max="1"
-            step="0.05"
+            min={0}
+            max={1}
+            step={0.05}
             value={masterVolume}
-            onChange={handleVolumeChange}
-            className="w-full"
-            style={{ accentColor: '#8b5cf6' }}
+            onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+            style={{
+              width: '100%',
+              height: 6,
+              appearance: 'none',
+              WebkitAppearance: 'none',
+              backgroundColor: 'rgba(45,74,94,0.4)',
+              borderRadius: 3,
+              outline: 'none',
+              cursor: 'pointer',
+              accentColor: '#00e5ff',
+            }}
           />
         </div>
 
-        {/* SFX Toggle */}
-        <div className="flex justify-between items-center">
-          <span style={{ fontSize: '8px', color: '#888' }}>SFX</span>
+        {/* SFX toggle */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 8, color: '#e8edf2' }}>SFX</span>
           <button
-            onClick={handleSfxToggle}
-            className="rounded px-4 py-2"
+            onClick={() => onSfxToggle(!sfxEnabled)}
             style={{
-              backgroundColor: sfxEnabled ? '#8b5cf6' : '#333',
-              color: '#fff',
-              fontSize: '8px',
-              border: 'none',
+              ...baseStyle,
+              padding: '6px 16px',
+              borderRadius: 4,
               cursor: 'pointer',
-              fontFamily: "'Press Start 2P', monospace",
-              touchAction: 'manipulation',
+              fontSize: 8,
+              outline: 'none',
+              WebkitTapHighlightColor: 'transparent',
+              backgroundColor: sfxEnabled ? '#00e5ff' : 'transparent',
+              color: sfxEnabled ? '#0f1923' : '#7a8fa0',
+              border: sfxEnabled ? 'none' : '1px solid rgba(45,74,94,0.6)',
             }}
           >
             {sfxEnabled ? 'ON' : 'OFF'}
           </button>
         </div>
 
-        {/* Quality */}
-        <div>
-          <span style={{ fontSize: '8px', color: '#888', display: 'block', marginBottom: 8 }}>
-            QUALITY
-          </span>
-          <div className="flex gap-2">
-            {(['auto', 'low', 'medium', 'high'] as const).map(q => (
-              <button
-                key={q}
-                onClick={() => setQualityOverride(q)}
-                className="rounded px-3 py-2"
-                style={{
-                  backgroundColor: qualityOverride === q ? '#8b5cf6' : '#222',
-                  color: qualityOverride === q ? '#fff' : '#666',
-                  fontSize: '7px',
-                  border: '1px solid #333',
-                  cursor: 'pointer',
-                  fontFamily: "'Press Start 2P', monospace",
-                  touchAction: 'manipulation',
-                }}
-              >
-                {q.toUpperCase()}
-              </button>
-            ))}
+        {/* Quality buttons */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span style={{ fontSize: 8, color: '#e8edf2' }}>QUALITY</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {QUALITY_OPTIONS.map((opt) => {
+              const isActive = qualityOverride === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => onQualityChange(opt.value)}
+                  style={{
+                    ...baseStyle,
+                    flex: 1,
+                    padding: '8px 4px',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                    fontSize: 7,
+                    outline: 'none',
+                    WebkitTapHighlightColor: 'transparent',
+                    backgroundColor: isActive ? '#00e5ff' : 'transparent',
+                    color: isActive ? '#0f1923' : '#7a8fa0',
+                    border: isActive ? 'none' : '1px solid rgba(45,74,94,0.4)',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      <button onClick={onBack} className="mt-8"
+      {/* Back button */}
+      <button
+        onClick={onBack}
         style={{
+          ...baseStyle,
           backgroundColor: 'transparent',
-          color: '#666',
-          fontSize: '8px',
-          border: '1px solid #333',
-          padding: '8px 16px',
+          color: '#7a8fa0',
+          border: '1px solid rgba(45,74,94,0.4)',
+          borderRadius: 6,
+          padding: '10px 24px',
           cursor: 'pointer',
-          fontFamily: "'Press Start 2P', monospace",
-          borderRadius: 4,
-          touchAction: 'manipulation',
-        }}>
+          fontSize: 9,
+          outline: 'none',
+          WebkitTapHighlightColor: 'transparent',
+          marginTop: 8,
+        }}
+      >
         BACK
       </button>
     </div>

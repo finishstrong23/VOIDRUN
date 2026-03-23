@@ -6,43 +6,49 @@ import { NovaBlast } from './NovaBlast';
 import { ChainLightning } from './ChainLightning';
 import { DroneSwarm } from './DroneSwarm';
 
-export const WEAPON_DEFS: Record<string, { name: string; description: string; create: () => Weapon }> = {
+interface WeaponDef {
+  name: string;
+  description: string;
+  create: () => Weapon;
+}
+
+export const WEAPON_DEFS: Record<string, WeaponDef> = {
   whipblade: {
     name: 'Whipblade',
-    description: 'Slashes a wide arc in your facing direction',
+    description: 'Slashes enemies in an arc in front of you.',
     create: () => new Whipblade(),
   },
-  voidOrbs: {
+  void_orbs: {
     name: 'Void Orbs',
-    description: 'Orbs orbit you, damaging enemies on contact',
+    description: 'Orbiting energy spheres that damage nearby enemies.',
     create: () => new VoidOrbs(),
   },
-  plasmaLance: {
+  plasma_lance: {
     name: 'Plasma Lance',
-    description: 'Fires a bolt at the nearest enemy',
+    description: 'Fires piercing projectiles at the nearest enemy.',
     create: () => new PlasmaLance(),
   },
-  novaBlast: {
+  nova_blast: {
     name: 'Nova Blast',
-    description: 'Explosive shockwave around you',
+    description: 'Releases a devastating explosion around you.',
     create: () => new NovaBlast(),
   },
-  chainLightning: {
+  chain_lightning: {
     name: 'Chain Lightning',
-    description: 'Zaps the nearest enemy and chains to others',
+    description: 'Lightning that arcs between nearby enemies.',
     create: () => new ChainLightning(),
   },
-  droneSwarm: {
+  drone_swarm: {
     name: 'Drone Swarm',
-    description: 'Deploys autonomous drones that hunt enemies',
+    description: 'Autonomous drones that seek and attack enemies.',
     create: () => new DroneSwarm(),
   },
 };
 
+export const ALL_WEAPON_IDS: string[] = Object.keys(WEAPON_DEFS);
+
 export function createWeapon(id: string): Weapon {
   const def = WEAPON_DEFS[id];
-  if (!def) throw new Error(`Unknown weapon: ${id}`);
+  if (!def) throw new Error(`Unknown weapon ID: ${id}`);
   return def.create();
 }
-
-export const ALL_WEAPON_IDS = Object.keys(WEAPON_DEFS);

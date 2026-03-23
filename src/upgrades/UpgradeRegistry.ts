@@ -1,124 +1,138 @@
 import type { Upgrade } from '../types';
 import type { Weapon } from '../weapons/Weapon';
-import { WEAPON_DEFS, ALL_WEAPON_IDS } from '../weapons/WeaponRegistry';
-import { STAT_UPGRADES } from './StatUpgrades';
-import { WEAPON_LEVEL_DESCRIPTIONS } from './WeaponUpgrades';
+import { STAT_UPGRADES, type StatUpgradeDef } from './StatUpgrades';
+import { WEAPON_LEVEL_DESCS } from './WeaponUpgrades';
 
+/** Tracks current stat upgrade levels during a run. */
+const statLevels = new Map<string, number>();
+
+export function resetUpgradeState(): void {
+  statLevels.clear();
+}
+
+export function getStatLevel(id: string): number {
+  return statLevels.get(id) ?? 0;
+}
+
+export function incrementStatLevel(id: string): void {
+  statLevels.set(id, (statLevels.get(id) ?? 0) + 1);
+}
+
+export function getStatUpgradeDef(id: string): StatUpgradeDef | undefined {
+  return STAT_UPGRADES.find((s) => s.id === id);
+}
+
+/**
+ * Generate 3 unique upgrade options for a level-up.
+ * @param equippedWeapons - weapons the player currently has
+ * @param allWeaponIds - all weapon IDs available in the game
+ */
 export function generateUpgradeOptions(
   equippedWeapons: Weapon[],
-  statLevels: Map<string, number>,
-  playerLevel: number
+  allWeaponIds: string[],
 ): Upgrade[] {
-  const options: Upgrade[] = [];
-  const maxWeapons = 6;
+  const pool: Upgrade[] = [];
 
-  // Collect candidate pools
-  const weaponLevelUps: Upgrade[] = [];
-  const newWeapons: Upgrade[] = [];
-  const statUpgrades: Upgrade[] = [];
-
-  // Weapon level-ups
-  for (const weapon of equippedWeapons) {
-    if (weapon.level < weapon.maxLevel) {
-      const desc = WEAPON_LEVEL_DESCRIPTIONS[weapon.id];
-      weaponLevelUps.push({
-        id: `weapon_level_${weapon.id}`,
-        name: WEAPON_DEFS[weapon.id].name,
-        description: desc ? desc[weapon.level - 1] : `Level ${weapon.level + 1}`,
-        type: 'weapon_level',
-        icon: 'weapon',
-        weaponId: weapon.id,
-        currentLevel: weapon.level,
-        maxLevel: weapon.maxLevel,
+  // --- New weapons (40% weight each) ---
+  if (equippedWeapons.length < 6) {
+    const equippedIds = new Set(equippedWeapons.map((w) => w.id));
+    for (const wid of allWeaponIds) {
+      if (equippedIds.has(wid)) continue;
+      const desc = WEAPON_LEVEL_DESCS.find((d) => d.weaponId === wid);
+      const name = desc?.name ?? wid;
+      const icon = desc?.icon ?? 'star';
+      pool.push({
+        id: `new_${wid}`,
+        name: `New: ${name}`,
+        description: 'Add a new weapon',
+        type: 'weapon_new',
+        icon,
+        iconBg: '#ffd60a',
+        weaponId: wid,
       });
     }
   }
 
-  // New weapons
-  if (equippedWeapons.length < maxWeapons) {
-    const equippedIds = new Set(equippedWeapons.map(w => w.id));
-    for (const id of ALL_WEAPON_IDS) {
-      if (!equippedIds.has(id)) {
-        const def = WEAPON_DEFS[id];
-        newWeapons.push({
-          id: `weapon_new_${id}`,
-          name: def.name,
-          description: def.description,
-          type: 'weapon_new',
-          icon: 'weapon_new',
-          weaponId: id,
-        });
+  // --- Weapon level-ups ---
+  for (const weapon of equippedWeapons) {
+    if (weapon.isMaxLevel()) continue;
+    const desc = WEAPON_LEVEL_DESCS.find((d) => d.weaponId === weapon.id);
+    const levelDesc = desc?.levels[weapon.level - 1] ?? `Lv${weapon.level + 1}`;
+    const icon = desc?.icon ?? 'star';
+    pool.push({
+      id: `lvl_${weapon.id}`,
+      name: `${weapon.name} Lv.${weapon.level + 1}`,
+      description: levelDesc,
+      type: 'weapon_level',
+      icon,
+      iconBg: '#ff2d55',
+      weaponId: weapon.id,
+      currentLevel: weapon.level,
+      maxLevel: weapon.maxLevel,
+    });
+  }
+
+  // --- Stat upgrades ---
+  for (const stat of STAT_UPGRADES) {
+    const currentLvl = getStatLevel(stat.id);
+    if (currentLvl >= stat.maxLevel) continue;
+    pool.push({
+      id: stat.id,
+      name: stat.name,
+      description: `${stat.description} (${currentLvl + 1}/${stat.maxLevel})`,
+      type: 'stat',
+      icon: stat.icon,
+      iconBg: '#00e5ff',
+      currentLevel: currentLvl,
+      maxLevel: stat.maxLevel,
+    });
+  }
+
+  // --- Pick 3 unique options with weighted selection ---
+  const chosen: Upgrade[] = [];
+  const usedIds = new Set<string>();
+
+  while (chosen.length < 3 && pool.length > 0) {
+    // Assign weights: new weapons get 40% bias
+    const weights = pool.map((u) => (u.type === 'weapon_new' ? 2.0 : 1.0));
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    let roll = Math.random() * totalWeight;
+
+    let idx = 0;
+    for (let i = 0; i < weights.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) {
+        idx = i;
+        break;
       }
     }
-  }
 
-  // Stat upgrades
-  for (const stat of STAT_UPGRADES) {
-    const currentLevel = statLevels.get(stat.id) || 0;
-    if (currentLevel < stat.maxLevel) {
-      statUpgrades.push({
-        id: stat.id,
-        name: stat.name,
-        description: stat.description,
-        type: 'stat',
-        icon: stat.icon,
-        currentLevel,
-        maxLevel: stat.maxLevel,
-      });
+    const pick = pool[idx];
+    if (!usedIds.has(pick.id)) {
+      chosen.push(pick);
+      usedIds.add(pick.id);
     }
+    pool.splice(idx, 1);
   }
 
-  // Selection logic: pick 3 options
-  const allCandidates = [...weaponLevelUps, ...newWeapons, ...statUpgrades];
-  if (allCandidates.length === 0) {
-    // All maxed - offer full heal
-    return [{
-      id: 'full_heal',
-      name: 'Full Heal',
-      description: 'Restore to max HP',
-      type: 'stat',
-      icon: 'heart',
-    }];
-  }
-
-  // Slot 1: 40% chance for new weapon if available
-  if (newWeapons.length > 0 && Math.random() < 0.4) {
-    const idx = Math.floor(Math.random() * newWeapons.length);
-    options.push(newWeapons[idx]);
-    newWeapons.splice(idx, 1);
-  }
-
-  // Fill remaining slots
-  const remaining = [...weaponLevelUps, ...newWeapons, ...statUpgrades]
-    .filter(u => !options.find(o => o.id === u.id));
-
-  shuffle(remaining);
-
-  while (options.length < 3 && remaining.length > 0) {
-    options.push(remaining.pop()!);
-  }
-
-  // If we still don't have 3, pad with full heal
-  while (options.length < 3) {
-    if (!options.find(o => o.id === 'full_heal')) {
-      options.push({
+  // --- Fallback: full heal if no upgrades available ---
+  while (chosen.length < 3) {
+    // Pad with full heal option (only one unique heal entry)
+    if (!usedIds.has('full_heal')) {
+      chosen.push({
         id: 'full_heal',
         name: 'Full Heal',
-        description: 'Restore to max HP',
+        description: 'Restore all HP',
         type: 'stat',
         icon: 'heart',
+        iconBg: '#30d158',
       });
+      usedIds.add('full_heal');
     } else {
+      // Absolute fallback - break to avoid infinite loop
       break;
     }
   }
 
-  return options.slice(0, 3);
-}
-
-function shuffle<T>(arr: T[]): void {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
+  return chosen;
 }

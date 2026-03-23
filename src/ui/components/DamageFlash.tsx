@@ -1,32 +1,30 @@
 import React, { useEffect, useState } from 'react';
 
-interface Props {
-  hp: number;
+interface DamageFlashProps {
+  trigger: number; // increment to trigger flash
 }
 
-export const DamageFlash: React.FC<Props> = ({ hp }) => {
-  const [flash, setFlash] = useState(false);
-  const [prevHP, setPrevHP] = useState(hp);
+export const DamageFlash: React.FC<DamageFlashProps> = ({ trigger }) => {
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (hp < prevHP) {
-      setFlash(true);
-      const t = setTimeout(() => setFlash(false), 150);
-      return () => clearTimeout(t);
-    }
-    setPrevHP(hp);
-  }, [hp, prevHP]);
+    if (trigger <= 0) return;
+    setVisible(true);
+    const timer = setTimeout(() => setVisible(false), 150);
+    return () => clearTimeout(timer);
+  }, [trigger]);
 
-  if (!flash) return null;
+  if (!visible) return null;
 
   return (
     <div
       style={{
-        position: 'absolute',
-        top: 0, left: 0, right: 0, bottom: 0,
-        backgroundColor: 'rgba(255, 0, 0, 0.2)',
+        position: 'fixed',
+        inset: 0,
         pointerEvents: 'none',
-        transition: 'opacity 150ms',
+        zIndex: 100,
+        background: 'radial-gradient(ellipse at center, transparent 40%, rgba(255,45,85,0.3) 100%)',
+        animation: 'damageFlashFade 150ms ease-out forwards',
       }}
     />
   );

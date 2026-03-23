@@ -1,121 +1,96 @@
-import { Graphics } from 'pixi.js';
 import { Weapon } from './Weapon';
-import { calculateDamage } from '../data/balance';
+import { Graphics } from 'pixi.js';
 import { distance, angle, TWO_PI } from '../utils/math';
+import { calculateDamage } from '../data/balance';
 import { playSound } from '../utils/sound';
 import type { Player } from '../entities/Player';
 import type { Enemy } from '../entities/Enemy';
 import type { Game } from '../game/Game';
 
-const LEVELS = [
-  { damage: 8, droneCount: 1, droneSpeed: 250, hits: 3, permanent: false },
-  { damage: 8, droneCount: 2, droneSpeed: 250, hits: 3, permanent: false },
-  { damage: 12, droneCount: 2, droneSpeed: 250, hits: 4, permanent: false },
-  { damage: 12, droneCount: 3, droneSpeed: 300, hits: 4, permanent: false },
-  { damage: 12, droneCount: 5, droneSpeed: 300, hits: 999, permanent: true },
+interface DroneSwarmLevel {
+  dmg: number;
+  drones: number;
+  speed: number;
+  hits: number;
+  permanent?: boolean;
+}
+
+const LEVELS: DroneSwarmLevel[] = [
+  { dmg: 8, drones: 1, speed: 250, hits: 3 },
+  { dmg: 8, drones: 2, speed: 250, hits: 3 },
+  { dmg: 12, drones: 2, speed: 250, hits: 4 },
+  { dmg: 12, drones: 3, speed: 300, hits: 4 },
+  { dmg: 12, drones: 5, speed: 300, hits: 999, permanent: true },
 ];
 
-interface Drone {
+const DRONE_RADIUS = 6;
+const ORBIT_RADIUS = 70;
+const ORBIT_SPEED = 1.5; // radians per second
+const ATTACK_RANGE = 300;
+const HIT_COOLDOWN = 0.4;
+
+interface DroneState {
   x: number;
   y: number;
-  vx: number;
-  vy: number;
   hitsRemaining: number;
-  lifetime: number;
-  maxLifetime: number;
-  graphics: Graphics;
-  lastHitDist: number;
+  orbitAngle: number;
+  graphic: Graphics;
+  targetId: number | null;
+  hitCooldown: number;
   lastHitEnemy: number;
-  respawnTimer: number;
-  active: boolean;
+  lastHitDist: number;
 }
 
 export class DroneSwarm extends Weapon {
-  drones: Drone[] = [];
-  orbitAngle = 0;
+  private drones: DroneState[] = [];
+  private initialized = false;
 
   constructor() {
-    super('droneSwarm', 'Drone Swarm');
+    super('drone_swarm', 'Drone Swarm');
   }
 
-  getCooldown(player: Player): number {
-    return 2.0 * (1 - player.stats.cooldownReduction);
+  private get stats(): DroneSwarmLevel {
+    return LEVELS[this.level - 1];
   }
 
-  fire(player: Player, _enemies: Enemy[], game: Game): void {
-    const lvl = LEVELS[this.level - 1];
-
-    // Only spawn drones up to the level's drone count
-    const activeDrones = this.drones.filter(d => d.active).length;
-    if (activeDrones >= lvl.droneCount) return;
-
-    const drone = this.createDrone(player, game);
-    this.drones.push(drone);
-    playSound('weapon_drone');
-  }
-
-  private createDrone(player: Player, game: Game): Drone {
-    const lvl = LEVELS[this.level - 1];
-    const g = new Graphics();
-    g.rect(-4, -4, 8, 8);
-    g.fill({ color: 0x60a5fa });
-    g.stroke({ color: 0x93c5fd, width: 1 });
-    game.layers.projectiles.addChild(g);
-
-    return {
-      x: player.x,
-      y: player.y,
-      vx: 0,
-      vy: 0,
-      hitsRemaining: lvl.hits,
-      lifetime: 0,
-      maxLifetime: lvl.permanent ? Infinity : 5,
-      graphics: g,
-      lastHitDist: 0,
-      lastHitEnemy: -1,
-      respawnTimer: 0,
-      active: true,
-    };
+  getCooldown(_player: Player): number {
+    return 0; // Passive, drones managed in update
   }
 
   update(dt: number, player: Player, enemies: Enemy[], game: Game): void {
-    const lvl = LEVELS[this.level - 1];
-
-    // Handle cooldown-based spawning for non-permanent drones
-    if (!lvl.permanent) {
-      super.update(dt, player, enemies, game);
+    if (!this.initialized) {
+      this.rebuildDrones(player, game);
+      this.initialized = true;
     }
 
-    this.orbitAngle += dt * 2;
+    const { drones: droneCount, speed, dmg, hits, permanent } = this.stats;
 
-    // Handle permanent drone respawn
-    if (lvl.permanent) {
-      const activeDrones = this.drones.filter(d => d.active).length;
-      const respawning = this.drones.filter(d => !d.active && d.respawnTimer > 0);
-      for (const drone of respawning) {
-        drone.respawnTimer -= dt;
-        if (drone.respawnTimer <= 0) {
-          this.respawnDrone(drone, player, game);
+    // Rebuild drones if level changed
+    if (this.drones.length !== droneCount) {
+      this.rebuildDrones(player, game);
+    }
+
+    // Remove expired drones (0 hits remaining) unless permanent
+    if (!permanent) {
+      for (let i = this.drones.length - 1; i >= 0; i--) {
+        if (this.drones[i].hitsRemaining <= 0) {
+          this.drones[i].graphic.removeFromParent();
+          this.drones[i].graphic.destroy();
+          this.drones.splice(i, 1);
         }
       }
-      // Spawn missing drones
-      if (activeDrones + respawning.length < lvl.droneCount) {
-        const drone = this.createDrone(player, game);
-        this.drones.push(drone);
-      }
     }
 
-    // Update active drones
     for (const drone of this.drones) {
-      if (!drone.active) continue;
+      // Update hit cooldown
+      if (drone.hitCooldown > 0) drone.hitCooldown -= dt;
 
-      drone.lifetime += dt;
-
-      // Find nearest enemy
+      // Find target
       let target: Enemy | null = null;
-      let targetDist = 400;
+      let targetDist = ATTACK_RANGE;
+
       for (const enemy of enemies) {
-        if (!enemy.active) continue;
+        if (!enemy.active || !enemy.isAlive()) continue;
         const dist = distance(drone.x, drone.y, enemy.x, enemy.y);
         if (dist < targetDist) {
           targetDist = dist;
@@ -124,92 +99,96 @@ export class DroneSwarm extends Weapon {
       }
 
       if (target) {
-        // Seek enemy
+        // Move toward target
         const a = angle(drone.x, drone.y, target.x, target.y);
-        drone.vx = Math.cos(a) * lvl.droneSpeed;
-        drone.vy = Math.sin(a) * lvl.droneSpeed;
+        drone.x += Math.cos(a) * speed * dt;
+        drone.y += Math.sin(a) * speed * dt;
+        drone.targetId = target.id;
+        drone.lastHitEnemy = target.id;
+        drone.lastHitDist = distance(drone.x, drone.y, target.x, target.y);
+
+        // Check collision
+        const dist = distance(drone.x, drone.y, target.x, target.y);
+        if (dist < DRONE_RADIUS + target.radius && drone.hitCooldown <= 0) {
+          const isCrit = Math.random() < (player.stats?.critChance ?? 0.05);
+          const damage = calculateDamage(dmg, player.stats?.damage ?? 1, target.armor ?? 0, isCrit, player.stats?.critDamage ?? 1.5);
+          game.damageEnemy(target, damage, isCrit, drone.x, drone.y);
+          drone.hitsRemaining--;
+          drone.hitCooldown = HIT_COOLDOWN;
+          playSound('weapon_drone');
+        }
       } else {
-        // Orbit player
-        const i = this.drones.indexOf(drone);
-        const orbAngle = this.orbitAngle + (TWO_PI / Math.max(1, this.drones.filter(d => d.active).length)) * i;
-        const targetX = player.x + Math.cos(orbAngle) * 100;
-        const targetY = player.y + Math.sin(orbAngle) * 100;
+        // Orbit player when no target
+        drone.orbitAngle += ORBIT_SPEED * dt;
+        if (drone.orbitAngle > TWO_PI) drone.orbitAngle -= TWO_PI;
+        const targetX = player.x + Math.cos(drone.orbitAngle) * ORBIT_RADIUS;
+        const targetY = player.y + Math.sin(drone.orbitAngle) * ORBIT_RADIUS;
         const a = angle(drone.x, drone.y, targetX, targetY);
         const dist = distance(drone.x, drone.y, targetX, targetY);
-        const speed = Math.min(lvl.droneSpeed, dist * 5);
-        drone.vx = Math.cos(a) * speed;
-        drone.vy = Math.sin(a) * speed;
+        const moveSpeed = Math.min(speed * dt, dist);
+        drone.x += Math.cos(a) * moveSpeed;
+        drone.y += Math.sin(a) * moveSpeed;
+        drone.targetId = null;
       }
 
-      drone.x += drone.vx * dt;
-      drone.y += drone.vy * dt;
-      drone.graphics.position.set(drone.x, drone.y);
-      drone.graphics.rotation += dt * 8;
-
-      // Collision with enemies
-      if (target && targetDist < 8 + target.radius) {
-        // Check travel distance since last hit on same enemy
-        if (target.id !== drone.lastHitEnemy || drone.lastHitDist >= 30) {
-          const isCrit = Math.random() < player.stats.critChance;
-          const dmg = calculateDamage(lvl.damage, player.stats.damage, target.armor, isCrit, player.stats.critDamage);
-          game.damageEnemy(target, dmg, isCrit, drone.x, drone.y);
-          drone.hitsRemaining--;
-          drone.lastHitDist = 0;
-          drone.lastHitEnemy = target.id;
-        }
-      }
-
-      drone.lastHitDist += Math.sqrt(drone.vx * drone.vx + drone.vy * drone.vy) * dt;
-
-      // Check expiry
-      if (drone.hitsRemaining <= 0 || drone.lifetime >= drone.maxLifetime) {
-        drone.active = false;
-        drone.graphics.removeFromParent();
-        if (lvl.permanent) {
-          drone.respawnTimer = 2;
-        }
-      }
-    }
-
-    // Clean up dead non-permanent drones
-    if (!lvl.permanent) {
-      this.drones = this.drones.filter(d => d.active);
+      // Update graphic position
+      drone.graphic.x = drone.x;
+      drone.graphic.y = drone.y;
     }
   }
 
-  private respawnDrone(drone: Drone, player: Player, game: Game): void {
-    const lvl = LEVELS[this.level - 1];
-    const g = new Graphics();
-    g.rect(-4, -4, 8, 8);
-    g.fill({ color: 0x60a5fa });
-    g.stroke({ color: 0x93c5fd, width: 1 });
-    game.layers.projectiles.addChild(g);
+  fire(_player: Player, _enemies: Enemy[], _game: Game): void {
+    // Passive weapon - handled in update()
+  }
 
-    drone.x = player.x;
-    drone.y = player.y;
-    drone.vx = 0;
-    drone.vy = 0;
-    drone.hitsRemaining = lvl.hits;
-    drone.lifetime = 0;
-    drone.graphics = g;
-    drone.lastHitDist = 0;
-    drone.lastHitEnemy = -1;
-    drone.respawnTimer = 0;
-    drone.active = true;
+  private rebuildDrones(player: Player, game: Game): void {
+    // Remove old drone graphics
+    for (const drone of this.drones) {
+      drone.graphic.removeFromParent();
+      drone.graphic.destroy();
+    }
+    this.drones = [];
+
+    const { drones: droneCount, hits } = this.stats;
+    for (let i = 0; i < droneCount; i++) {
+      const gfx = new Graphics();
+
+      // Drone body
+      gfx.circle(0, 0, DRONE_RADIUS);
+      gfx.fill({ color: 0xffd60a, alpha: 0.8 });
+
+      // Drone glow
+      gfx.circle(0, 0, DRONE_RADIUS + 3);
+      gfx.fill({ color: 0xffd60a, alpha: 0.2 });
+
+      // Inner dot
+      gfx.circle(0, 0, 2);
+      gfx.fill({ color: 0xffffff, alpha: 0.9 });
+
+      game.layers.effects.addChild(gfx);
+
+      const orbitAngle = (TWO_PI / droneCount) * i;
+      this.drones.push({
+        x: player.x + Math.cos(orbitAngle) * ORBIT_RADIUS,
+        y: player.y + Math.sin(orbitAngle) * ORBIT_RADIUS,
+        hitsRemaining: hits,
+        orbitAngle,
+        graphic: gfx,
+        targetId: null,
+        hitCooldown: 0,
+        lastHitEnemy: -1,
+        lastHitDist: 0,
+      });
+    }
   }
 
   reset(): void {
     super.reset();
     for (const drone of this.drones) {
-      drone.graphics.removeFromParent();
+      drone.graphic.removeFromParent();
+      drone.graphic.destroy();
     }
     this.drones = [];
-    this.orbitAngle = 0;
-  }
-
-  getLevelDescription(): string {
-    const lvl = LEVELS[this.level - 1];
-    if (this.level === 5) return 'Hive Mind: 5 permanent drones';
-    return `Dmg:${lvl.damage} Drones:${lvl.droneCount} Hits:${lvl.hits}`;
+    this.initialized = false;
   }
 }

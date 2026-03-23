@@ -1,84 +1,180 @@
 import React from 'react';
 import { useGameState } from '../hooks/useGameState';
 
-interface Props {
+export interface StatsScreenProps {
   onBack: () => void;
 }
+
+const baseStyle: React.CSSProperties = {
+  fontFamily: "'Press Start 2P', monospace",
+};
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export const StatsScreen: React.FC<Props> = ({ onBack }) => {
-  const { highScore, totalKills, totalRuns, bestTime, runHistory } = useGameState();
+export const StatsScreen: React.FC<StatsScreenProps> = ({
+  onBack,
+}) => {
+  const {
+    highScore,
+    bestTime,
+    bestWave,
+    totalKills,
+    totalRuns,
+    runHistory,
+  } = useGameState();
+
+  const lifetimeStats = [
+    { label: 'HIGH SCORE', value: highScore.toLocaleString() },
+    { label: 'BEST TIME', value: formatTime(bestTime) },
+    { label: 'BEST WAVE', value: String(bestWave) },
+    { label: 'TOTAL KILLS', value: totalKills.toLocaleString() },
+    { label: 'TOTAL RUNS', value: String(totalRuns) },
+  ];
 
   return (
-    <div className="flex flex-col items-center h-full p-4 overflow-y-auto"
-      style={{ fontFamily: "'Press Start 2P', monospace" }}>
-      <h2 style={{ fontSize: '14px', color: '#fff', marginBottom: 20, marginTop: 20 }}>
+    <div
+      style={{
+        ...baseStyle,
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: '#0f1923',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        padding: '40px 16px',
+        gap: 20,
+        zIndex: 900,
+        overflowY: 'auto',
+      }}
+    >
+      <h2
+        style={{
+          fontSize: 16,
+          color: '#e8edf2',
+          margin: 0,
+          letterSpacing: 3,
+        }}
+      >
         STATS
       </h2>
 
-      <div className="rounded p-4 mb-4 w-full" style={{
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        border: '1px solid #333',
-        maxWidth: 360,
-      }}>
-        <div className="flex justify-between mb-2">
-          <span style={{ fontSize: '8px', color: '#888' }}>High Score</span>
-          <span style={{ fontSize: '10px', color: '#eab308' }}>{highScore}</span>
-        </div>
-        <div className="flex justify-between mb-2">
-          <span style={{ fontSize: '8px', color: '#888' }}>Best Time</span>
-          <span style={{ fontSize: '10px', color: '#fff' }}>{formatTime(bestTime)}</span>
-        </div>
-        <div className="flex justify-between mb-2">
-          <span style={{ fontSize: '8px', color: '#888' }}>Total Kills</span>
-          <span style={{ fontSize: '10px', color: '#ef4444' }}>{totalKills}</span>
-        </div>
-        <div className="flex justify-between">
-          <span style={{ fontSize: '8px', color: '#888' }}>Total Runs</span>
-          <span style={{ fontSize: '10px', color: '#fff' }}>{totalRuns}</span>
-        </div>
+      {/* Lifetime stats panel */}
+      <div
+        style={{
+          backgroundColor: 'rgba(28,42,58,0.85)',
+          border: '1px solid rgba(45,74,94,0.4)',
+          borderRadius: 8,
+          padding: '16px 20px',
+          width: '100%',
+          maxWidth: 320,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 8,
+            color: '#00e5ff',
+            marginBottom: 4,
+            letterSpacing: 2,
+          }}
+        >
+          LIFETIME
+        </span>
+        {lifetimeStats.map((stat) => (
+          <div
+            key={stat.label}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <span style={{ fontSize: 7, color: '#7a8fa0' }}>{stat.label}</span>
+            <span style={{ fontSize: 9, color: '#e8edf2' }}>{stat.value}</span>
+          </div>
+        ))}
       </div>
 
-      {runHistory.length > 0 && (
-        <>
-          <h3 style={{ fontSize: '10px', color: '#888', marginBottom: 12 }}>
-            RECENT RUNS
-          </h3>
-          <div className="w-full" style={{ maxWidth: 360 }}>
-            {runHistory.map((run, i) => (
-              <div key={i} className="rounded p-2 mb-2 flex justify-between"
-                style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid #222' }}>
-                <div>
-                  <span style={{ fontSize: '8px', color: '#eab308' }}>{run.score}</span>
-                  <span style={{ fontSize: '7px', color: '#666', marginLeft: 8 }}>Lv.{run.level}</span>
-                </div>
-                <div>
-                  <span style={{ fontSize: '7px', color: '#888' }}>{formatTime(run.time)}</span>
-                  <span style={{ fontSize: '7px', color: '#ef4444', marginLeft: 8 }}>{run.kills}K</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      <button onClick={onBack} className="mt-6 mb-6"
+      {/* Recent runs */}
+      <div
         style={{
+          backgroundColor: 'rgba(28,42,58,0.85)',
+          border: '1px solid rgba(45,74,94,0.4)',
+          borderRadius: 8,
+          padding: '16px 20px',
+          width: '100%',
+          maxWidth: 320,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 8,
+            color: '#00e5ff',
+            marginBottom: 4,
+            letterSpacing: 2,
+          }}
+        >
+          RECENT RUNS
+        </span>
+        {runHistory.length === 0 ? (
+          <span style={{ fontSize: 7, color: '#7a8fa0' }}>No runs yet</span>
+        ) : (
+          runHistory.map((run, index) => (
+            <div
+              key={index}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '6px 0',
+                borderBottom:
+                  index < runHistory.length - 1
+                    ? '1px solid rgba(45,74,94,0.2)'
+                    : 'none',
+              }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={{ fontSize: 7, color: '#e8edf2' }}>
+                  {run.className} - W{run.wave} Lv.{run.level}
+                </span>
+                <span style={{ fontSize: 6, color: '#7a8fa0' }}>
+                  {formatTime(run.time)} | {run.kills} kills
+                </span>
+              </div>
+              <span style={{ fontSize: 8, color: '#ffd60a' }}>
+                {run.score.toLocaleString()}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Back button */}
+      <button
+        onClick={onBack}
+        style={{
+          ...baseStyle,
           backgroundColor: 'transparent',
-          color: '#666',
-          fontSize: '8px',
-          border: '1px solid #333',
-          padding: '8px 16px',
+          color: '#7a8fa0',
+          border: '1px solid rgba(45,74,94,0.4)',
+          borderRadius: 6,
+          padding: '10px 24px',
           cursor: 'pointer',
-          fontFamily: "'Press Start 2P', monospace",
-          borderRadius: 4,
-          touchAction: 'manipulation',
-        }}>
+          fontSize: 9,
+          outline: 'none',
+          WebkitTapHighlightColor: 'transparent',
+          marginTop: 8,
+        }}
+      >
         BACK
       </button>
     </div>

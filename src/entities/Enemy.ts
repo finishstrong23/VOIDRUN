@@ -1,6 +1,7 @@
-import { Graphics, Container } from 'pixi.js';
+import { Sprite } from 'pixi.js';
 import { Entity } from './Entity';
 import type { EnemyDef, EnemyAI } from '../types';
+import { spriteFactory } from '../sprites/SpriteFactory';
 
 export class Enemy extends Entity {
   typeName = '';
@@ -8,14 +9,15 @@ export class Enemy extends Entity {
   speed = 0;
   xpValue = 0;
   armor = 0;
-  color = 0xef4444;
-  shape: string = 'circle';
+  color = 0xff2d55;
   ai: EnemyAI = 'chase';
   knockbackResist = 0;
   isBoss = false;
-  spawnWeight = 0;
+  spawnWeight = 1;
+  spriteKey = '';
+  displaySize = 24;
 
-  // Knockback state
+  // Knockback
   knockbackVx = 0;
   knockbackVy = 0;
   knockbackTimer = 0;
@@ -28,17 +30,13 @@ export class Enemy extends Entity {
   isEnraged = false;
   rangedCooldown = 0;
 
-  // Visual state
+  // Visual
   flashTimer = 0;
   pulsePhase = 0;
-  bodyGraphics: Graphics | null = null;
+  animFrame = 0;
+  animTimer = 0;
 
-  init(def: EnemyDef, x: number, y: number, hpScale: number = 1, dmgScale: number = 1): void {
-    this.active = true;
-    this.x = x;
-    this.y = y;
-    this.prevX = x;
-    this.prevY = y;
+  init(def: EnemyDef, x: number, y: number, hpScale = 1, dmgScale = 1): void {
     this.typeName = def.name;
     this.hp = Math.round(def.hp * hpScale);
     this.maxHP = this.hp;
@@ -48,106 +46,40 @@ export class Enemy extends Entity {
     this.armor = def.armor;
     this.radius = def.radius;
     this.color = def.color;
-    this.shape = def.shape;
     this.ai = def.ai;
     this.knockbackResist = def.knockbackResist;
-    this.isBoss = def.isBoss || false;
+    this.isBoss = def.isBoss ?? false;
     this.spawnWeight = def.spawnWeight;
+    this.spriteKey = def.spriteKey;
+    this.displaySize = def.displaySize;
 
-    this.knockbackVx = 0;
-    this.knockbackVy = 0;
-    this.knockbackTimer = 0;
-    this.aiTimer = 0;
-    this.aiPhase = 0;
-    this.targetX = 0;
-    this.targetY = 0;
-    this.isEnraged = false;
-    this.rangedCooldown = 0;
-    this.flashTimer = 0;
-    this.pulsePhase = Math.random() * Math.PI * 2;
-    this.vx = 0;
-    this.vy = 0;
+    this.x = x; this.y = y;
+    this.prevX = x; this.prevY = y;
+    this.vx = 0; this.vy = 0;
+    this.active = true;
 
-    this.createSprite();
+    this.knockbackVx = 0; this.knockbackVy = 0; this.knockbackTimer = 0;
+    this.aiTimer = 0; this.aiPhase = 0;
+    this.targetX = 0; this.targetY = 0;
+    this.isEnraged = false; this.rangedCooldown = 0;
+    this.flashTimer = 0; this.pulsePhase = 0;
+    this.animFrame = 0; this.animTimer = 0;
   }
 
-  createSprite(): void {
-    if (this.sprite) this.sprite.removeFromParent();
-
-    const container = new Container();
-    const g = new Graphics();
-    const r = this.radius;
-    const scale = this.isBoss ? 2 : 1;
-
-    switch (this.shape) {
-      case 'circle':
-        g.circle(0, 0, r);
-        break;
-      case 'triangle':
-        g.poly([0, -r, r * 0.866, r * 0.5, -r * 0.866, r * 0.5]);
-        break;
-      case 'diamond':
-        g.poly([0, -r, r, 0, 0, r, -r, 0]);
-        break;
-      case 'hexagon':
-        g.poly(this.hexPoints(r));
-        break;
-      case 'star':
-        g.poly(this.starPoints(r, r * 0.5, 5));
-        break;
-    }
-    g.fill({ color: this.color });
-    g.stroke({ color: this.lightenColor(this.color), width: 1 });
-
-    container.addChild(g);
-    container.scale.set(scale);
-    this.bodyGraphics = g;
-    this.sprite = container;
-  }
-
-  private hexPoints(r: number): number[] {
-    const pts: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      const a = (Math.PI / 3) * i - Math.PI / 6;
-      pts.push(Math.cos(a) * r, Math.sin(a) * r);
-    }
-    return pts;
-  }
-
-  private starPoints(outerR: number, innerR: number, points: number): number[] {
-    const pts: number[] = [];
-    for (let i = 0; i < points * 2; i++) {
-      const a = (Math.PI / points) * i - Math.PI / 2;
-      const r = i % 2 === 0 ? outerR : innerR;
-      pts.push(Math.cos(a) * r, Math.sin(a) * r);
-    }
-    return pts;
-  }
-
-  private lightenColor(color: number): number {
-    const r = Math.min(255, ((color >> 16) & 0xFF) + 40);
-    const g = Math.min(255, ((color >> 8) & 0xFF) + 40);
-    const b = Math.min(255, (color & 0xFF) + 40);
-    return (r << 16) | (g << 8) | b;
-  }
-
-  applyKnockback(fromX: number, fromY: number, force: number, duration: number): void {
-    const effectiveForce = force * (1 - this.knockbackResist);
-    if (effectiveForce <= 0) return;
-    const dx = this.x - fromX;
-    const dy = this.y - fromY;
-    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-    this.knockbackVx = (dx / dist) * effectiveForce / duration;
-    this.knockbackVy = (dy / dist) * effectiveForce / duration;
-    this.knockbackTimer = duration;
-  }
-
-  flash(): void {
-    this.flashTimer = 0.05;
+  createSprite(): Sprite {
+    const tex = spriteFactory.get(`${this.spriteKey}_0`);
+    const s = new Sprite(tex);
+    s.anchor.set(0.5);
+    // drawSize is displaySize * 2 (sprites generated at 2x), so scale = displaySize / drawSize = 0.5
+    const drawSize = this.displaySize * 2;
+    const scale = this.displaySize / drawSize;
+    s.scale.set(scale);
+    this.sprite = s;
+    return s;
   }
 
   update(dt: number): void {
-    // Handle knockback
+    // Knockback handling
     if (this.knockbackTimer > 0) {
       this.knockbackTimer -= dt;
       this.x += this.knockbackVx * dt;
@@ -160,62 +92,66 @@ export class Enemy extends Entity {
       super.update(dt);
     }
 
-    // Flash timer
-    if (this.flashTimer > 0) {
-      this.flashTimer -= dt;
+    // Animation timer
+    this.animTimer += dt * 1000;
+    if (this.animTimer >= 300) {
+      this.animTimer -= 300;
+      this.animFrame = (this.animFrame + 1) % 2;
     }
 
-    // Pulse animation
-    this.pulsePhase += dt * Math.PI * 2;
+    // Flash timer
+    if (this.flashTimer > 0) {
+      this.flashTimer -= dt * 1000;
+    }
 
-    // Boss enrage check
-    if (this.isBoss && !this.isEnraged && this.hp <= this.maxHP * 0.5) {
-      this.isEnraged = true;
+    // Pulse phase
+    this.pulsePhase += dt * 3;
+
+    // Ranged cooldown
+    if (this.rangedCooldown > 0) {
+      this.rangedCooldown -= dt;
     }
   }
 
   updateVisuals(alpha: number): void {
-    if (!this.sprite) return;
+    if (!this.sprite || !(this.sprite instanceof Sprite)) return;
+    const s = this.sprite as Sprite;
 
-    const renderX = this.prevX + (this.x - this.prevX) * alpha;
-    const renderY = this.prevY + (this.y - this.prevY) * alpha;
-    this.sprite.position.set(renderX, renderY);
+    // Interpolated position
+    const ix = this.prevX + (this.x - this.prevX) * alpha;
+    const iy = this.prevY + (this.y - this.prevY) * alpha;
+    s.position.set(ix, iy);
 
-    // Pulse
-    const pulse = 1 + Math.sin(this.pulsePhase) * 0.05;
-    const baseScale = this.isBoss ? 2 : 1;
-    this.sprite.scale.set(baseScale * pulse);
+    // Update animation frame texture
+    s.texture = spriteFactory.get(`${this.spriteKey}_${this.animFrame}`);
+
+    // Pulse animation (subtle scale oscillation)
+    const pulse = 1 + Math.sin(this.pulsePhase) * 0.03;
+    const baseScale = this.displaySize / (this.displaySize * 2);
+    s.scale.set(baseScale * pulse);
 
     // Boss rotation
     if (this.isBoss) {
-      this.sprite.rotation += 0.5 * (1 / 60);
+      s.rotation += 0.001;
     }
 
-    // Flash white
-    if (this.bodyGraphics) {
-      if (this.flashTimer > 0) {
-        this.bodyGraphics.tint = 0xffffff;
-      } else {
-        this.bodyGraphics.tint = 0xffffff; // reset (no tint)
-      }
+    // Flash white effect (damage feedback)
+    if (this.flashTimer > 0) {
+      s.tint = 0xffffff;
+    } else {
+      s.tint = 0xffffff; // reset to no tint
     }
   }
 
-  reset(): void {
-    super.reset();
-    this.typeName = '';
-    this.damage = 0;
-    this.speed = 0;
-    this.xpValue = 0;
-    this.armor = 0;
-    this.knockbackVx = 0;
-    this.knockbackVy = 0;
-    this.knockbackTimer = 0;
-    this.aiTimer = 0;
-    this.aiPhase = 0;
-    this.isEnraged = false;
-    this.rangedCooldown = 0;
-    this.flashTimer = 0;
-    this.bodyGraphics = null;
+  applyKnockback(forceX: number, forceY: number, duration: number): void {
+    const resist = this.knockbackResist;
+    if (resist >= 1) return;
+    this.knockbackVx = forceX * (1 - resist);
+    this.knockbackVy = forceY * (1 - resist);
+    this.knockbackTimer = duration;
+  }
+
+  flash(): void {
+    this.flashTimer = 100;
   }
 }

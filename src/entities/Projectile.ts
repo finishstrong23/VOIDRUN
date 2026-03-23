@@ -1,85 +1,70 @@
-import { Graphics, Container } from 'pixi.js';
+import { Sprite } from 'pixi.js';
 import { Entity } from './Entity';
+import { spriteFactory } from '../sprites/SpriteFactory';
 
 export class Projectile extends Entity {
   damage = 0;
   speed = 0;
-  pierce = 0;
+  piercing = 0;
   hitCount = 0;
   lifetime = 0;
   maxLifetime = 3;
-  isPlayerProjectile = true;
+  color = 0x00e5ff;
+  fromPlayer = true;
   homing = false;
-  homingTurnRate = 3;
+  isPlayerProjectile = true;
   angle = 0;
-  color = 0xffffff;
 
-  init(
-    x: number, y: number, angle: number,
-    speed: number, damage: number, pierce: number,
-    radius: number, isPlayer: boolean, color: number = 0xffffff,
-    homing: boolean = false
-  ): void {
-    this.active = true;
-    this.x = x;
-    this.y = y;
-    this.prevX = x;
-    this.prevY = y;
+  init(x: number, y: number, angle: number, speed: number, damage: number, pierce: number, radius: number, isPlayer: boolean, color = 0xffffff, homing = false): void {
+    this.x = x; this.y = y;
+    this.prevX = x; this.prevY = y;
     this.angle = angle;
     this.speed = speed;
-    this.damage = damage;
-    this.pierce = pierce;
-    this.hitCount = 0;
-    this.radius = radius;
-    this.isPlayerProjectile = isPlayer;
-    this.color = color;
-    this.homing = homing;
-    this.lifetime = 0;
-    this.maxLifetime = 3;
     this.vx = Math.cos(angle) * speed;
     this.vy = Math.sin(angle) * speed;
-
-    this.createSprite();
+    this.damage = damage;
+    this.piercing = pierce;
+    this.hitCount = 0;
+    this.lifetime = 0;
+    this.maxLifetime = 3;
+    this.color = color;
+    this.radius = radius;
+    this.fromPlayer = isPlayer;
+    this.isPlayerProjectile = isPlayer;
+    this.homing = homing;
+    this.hp = 1;
+    this.maxHP = 1;
+    this.active = true;
   }
 
-  createSprite(): void {
-    if (this.sprite) this.sprite.removeFromParent();
+  isExpired(): boolean {
+    return this.lifetime >= this.maxLifetime || !this.active;
+  }
 
-    const container = new Container();
-    const g = new Graphics();
-    g.circle(0, 0, this.radius);
-    g.fill({ color: this.color });
-    // Trail glow
-    const glow = new Graphics();
-    glow.circle(0, 0, this.radius * 2);
-    glow.fill({ color: this.color, alpha: 0.2 });
-    container.addChild(glow);
-    container.addChild(g);
-    this.sprite = container;
+  createSprite(): Sprite {
+    const hex = this.color.toString(16).padStart(6, '0');
+    const tex = spriteFactory.get(`particle_${hex}`);
+    const s = new Sprite(tex);
+    s.anchor.set(0.5);
+    s.scale.set(this.radius / 6); // scale relative to base particle size
+    this.sprite = s;
+    return s;
   }
 
   update(dt: number): void {
-    this.lifetime += dt;
     super.update(dt);
+    this.lifetime += dt;
+    if (this.lifetime >= this.maxLifetime) {
+      this.active = false;
+    }
   }
 
   onHit(): boolean {
     this.hitCount++;
-    return this.hitCount > this.pierce;
-  }
-
-  isExpired(): boolean {
-    return this.lifetime >= this.maxLifetime;
-  }
-
-  reset(): void {
-    super.reset();
-    this.damage = 0;
-    this.speed = 0;
-    this.pierce = 0;
-    this.hitCount = 0;
-    this.lifetime = 0;
-    this.homing = false;
-    this.color = 0xffffff;
+    if (this.hitCount > this.piercing) {
+      this.active = false;
+      return true; // destroyed
+    }
+    return false; // pierced through
   }
 }

@@ -1,114 +1,148 @@
-import { Graphics } from 'pixi.js';
 import { Weapon } from './Weapon';
-import { calculateDamage } from '../data/balance';
+import { Graphics } from 'pixi.js';
 import { distance, TWO_PI } from '../utils/math';
+import { calculateDamage } from '../data/balance';
+import { playSound } from '../utils/sound';
 import type { Player } from '../entities/Player';
 import type { Enemy } from '../entities/Enemy';
 import type { Game } from '../game/Game';
 
-const LEVELS = [
-  { damage: 8, orbCount: 2, orbitRadius: 50 },
-  { damage: 8, orbCount: 3, orbitRadius: 50 },
-  { damage: 11, orbCount: 3, orbitRadius: 50 },
-  { damage: 11, orbCount: 4, orbitRadius: 65 },
-  { damage: 17, orbCount: 4, orbitRadius: 65 },
+interface VoidOrbsLevel {
+  dmg: number;
+  orbs: number;
+  radius: number;
+}
+
+const LEVELS: VoidOrbsLevel[] = [
+  { dmg: 8, orbs: 2, radius: 50 },
+  { dmg: 8, orbs: 3, radius: 50 },
+  { dmg: 11, orbs: 3, radius: 50 },
+  { dmg: 11, orbs: 4, radius: 65 },
+  { dmg: 17, orbs: 4, radius: 65 },
 ];
 
-const ORB_RADIUS = 10;
-const ORBIT_SPEED = 2.0;
-const HIT_COOLDOWN = 0.5;
+const ORB_SPEED = 2; // radians per second
+const ORB_HIT_COOLDOWN = 0.5; // seconds
+const ORB_VISUAL_RADIUS = 8;
 
 export class VoidOrbs extends Weapon {
-  orbAngle = 0;
-  orbGraphics: Graphics[] = [];
-  hitCooldowns: Map<string, number> = new Map(); // "orbIndex-enemyId" -> timer
+  private orbAngle = 0;
+  private orbGraphics: Graphics[] = [];
+  private hitCooldowns: Map<number, number> = new Map(); // enemy.id -> remaining cooldown
+  private initialized = false;
 
   constructor() {
-    super('voidOrbs', 'Void Orbs');
+    super('void_orbs', 'Void Orbs');
   }
 
-  getCooldown(): number {
-    return 0; // Passive
+  private get stats(): VoidOrbsLevel {
+    return LEVELS[this.level - 1];
   }
 
-  fire(): void {
-    // Passive weapon, handled in update
+  getCooldown(_player: Player): number {
+    return 0; // Passive weapon, no cooldown
   }
 
   update(dt: number, player: Player, enemies: Enemy[], game: Game): void {
-    const lvl = LEVELS[this.level - 1];
-    this.orbAngle += ORBIT_SPEED * dt;
+    // Initialize orb graphics if needed
+    if (!this.initialized) {
+      this.rebuildOrbs(game);
+      this.initialized = true;
+    }
+
+    // Rebuild orbs if level changed (orb count mismatch)
+    if (this.orbGraphics.length !== this.stats.orbs) {
+      this.rebuildOrbs(game);
+    }
+
+    const { dmg, orbs, radius } = this.stats;
+
+    // Rotate orbs
+    this.orbAngle += ORB_SPEED * dt;
+    if (this.orbAngle > TWO_PI) this.orbAngle -= TWO_PI;
 
     // Update hit cooldowns
-    for (const [key, timer] of this.hitCooldowns) {
-      const newTimer = timer - dt;
-      if (newTimer <= 0) {
-        this.hitCooldowns.delete(key);
+    for (const [id, cd] of this.hitCooldowns) {
+      const remaining = cd - dt;
+      if (remaining <= 0) {
+        this.hitCooldowns.delete(id);
       } else {
-        this.hitCooldowns.set(key, newTimer);
+        this.hitCooldowns.set(id, remaining);
       }
-    }
-
-    // Ensure correct number of orb graphics
-    while (this.orbGraphics.length < lvl.orbCount) {
-      const g = new Graphics();
-      g.circle(0, 0, ORB_RADIUS);
-      g.fill({ color: 0x8b5cf6, alpha: 0.8 });
-      const glow = new Graphics();
-      glow.circle(0, 0, ORB_RADIUS * 2);
-      glow.fill({ color: 0x8b5cf6, alpha: 0.2 });
-      game.layers.player.addChild(glow);
-      game.layers.player.addChild(g);
-      this.orbGraphics.push(g);
-      // Store glow reference on the graphics object
-      (g as Graphics & { _glow: Graphics })._glow = glow;
-    }
-    while (this.orbGraphics.length > lvl.orbCount) {
-      const g = this.orbGraphics.pop()!;
-      const glow = (g as Graphics & { _glow: Graphics })._glow;
-      g.removeFromParent();
-      if (glow) glow.removeFromParent();
     }
 
     // Position orbs and check collisions
-    for (let i = 0; i < lvl.orbCount; i++) {
-      const angle = this.orbAngle + (TWO_PI / lvl.orbCount) * i;
-      const ox = player.x + Math.cos(angle) * lvl.orbitRadius;
-      const oy = player.y + Math.sin(angle) * lvl.orbitRadius;
+    for (let i = 0; i < orbs; i++) {
+      const orbA = this.orbAngle + (TWO_PI / orbs) * i;
+      const orbX = player.x + Math.cos(orbA) * radius;
+      const orbY = player.y + Math.sin(orbA) * radius;
 
-      this.orbGraphics[i].position.set(ox, oy);
-      const glow = (this.orbGraphics[i] as Graphics & { _glow: Graphics })._glow;
-      if (glow) glow.position.set(ox, oy);
+      // Update visual position
+      if (this.orbGraphics[i]) {
+        this.orbGraphics[i].x = orbX;
+        this.orbGraphics[i].y = orbY;
+      }
 
       // Check collision with enemies
-      const nearby = game.enemyHash.query(ox, oy, ORB_RADIUS + 40);
-      for (const entity of nearby) {
-        const enemy = entity as Enemy;
-        if (!enemy.active) continue;
+      const nearby = game.enemyHash.query(orbX, orbY, ORB_VISUAL_RADIUS + 20) as Enemy[];
+      for (const enemy of nearby) {
+        if (!enemy.active || !enemy.isAlive()) continue;
+        if (this.hitCooldowns.has(enemy.id)) continue;
 
-        const dist = distance(ox, oy, enemy.x, enemy.y);
-        if (dist < ORB_RADIUS + enemy.radius) {
-          const key = `${i}-${enemy.id}`;
-          if (!this.hitCooldowns.has(key)) {
-            const isCrit = Math.random() < player.stats.critChance;
-            const dmg = calculateDamage(lvl.damage, player.stats.damage, enemy.armor, isCrit, player.stats.critDamage);
-            game.damageEnemy(enemy, dmg, isCrit, ox, oy);
-            this.hitCooldowns.set(key, HIT_COOLDOWN);
-          }
+        const dist = distance(orbX, orbY, enemy.x, enemy.y);
+        if (dist < ORB_VISUAL_RADIUS + enemy.radius) {
+          const isCrit = Math.random() < (player.stats?.critChance ?? 0.05);
+          const damage = calculateDamage(dmg, player.stats?.damage ?? 1, enemy.armor ?? 0, isCrit, player.stats?.critDamage ?? 1.5);
+          game.damageEnemy(enemy, damage, isCrit, orbX, orbY);
+          this.hitCooldowns.set(enemy.id, ORB_HIT_COOLDOWN);
         }
       }
+    }
+  }
+
+  fire(_player: Player, _enemies: Enemy[], _game: Game): void {
+    // Passive weapon - damage is handled in update()
+  }
+
+  private rebuildOrbs(game: Game): void {
+    // Remove old orb graphics
+    for (const gfx of this.orbGraphics) {
+      gfx.removeFromParent();
+      gfx.destroy();
+    }
+    this.orbGraphics = [];
+
+    // Create new orb graphics
+    const { orbs } = this.stats;
+    for (let i = 0; i < orbs; i++) {
+      const gfx = new Graphics();
+
+      // Outer glow
+      gfx.circle(0, 0, ORB_VISUAL_RADIUS + 4);
+      gfx.fill({ color: 0xbf5af2, alpha: 0.2 });
+
+      // Core orb
+      gfx.circle(0, 0, ORB_VISUAL_RADIUS);
+      gfx.fill({ color: 0xbf5af2, alpha: 0.7 });
+
+      // Inner bright spot
+      gfx.circle(0, 0, ORB_VISUAL_RADIUS * 0.5);
+      gfx.fill({ color: 0xe0aaff, alpha: 0.9 });
+
+      game.layers.player.addChild(gfx);
+      this.orbGraphics.push(gfx);
     }
   }
 
   reset(): void {
     super.reset();
     this.orbAngle = 0;
-    for (const g of this.orbGraphics) {
-      const glow = (g as Graphics & { _glow: Graphics })._glow;
-      g.removeFromParent();
-      if (glow) glow.removeFromParent();
+    this.hitCooldowns.clear();
+    for (const gfx of this.orbGraphics) {
+      gfx.removeFromParent();
+      gfx.destroy();
     }
     this.orbGraphics = [];
-    this.hitCooldowns.clear();
+    this.initialized = false;
   }
 }

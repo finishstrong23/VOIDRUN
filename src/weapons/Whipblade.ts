@@ -1,109 +1,118 @@
-import { Graphics } from 'pixi.js';
 import { Weapon } from './Weapon';
+import { Graphics } from 'pixi.js';
+import { distance, angle, angleDiff, DEG_TO_RAD } from '../utils/math';
 import { calculateDamage } from '../data/balance';
-import { distance, angleDiff, DEG_TO_RAD } from '../utils/math';
 import { playSound } from '../utils/sound';
 import type { Player } from '../entities/Player';
 import type { Enemy } from '../entities/Enemy';
 import type { Game } from '../game/Game';
 
-const LEVELS = [
-  { damage: 12, arcAngle: 120, range: 80 },
-  { damage: 16, arcAngle: 120, range: 80 },
-  { damage: 16, arcAngle: 150, range: 80 },
-  { damage: 16, arcAngle: 150, range: 104 },
-  { damage: 24, arcAngle: 360, range: 104 },
+interface WhipbladeLevel {
+  dmg: number;
+  arc: number;
+  range: number;
+}
+
+const LEVELS: WhipbladeLevel[] = [
+  { dmg: 12, arc: 120, range: 80 },
+  { dmg: 16, arc: 120, range: 80 },
+  { dmg: 16, arc: 150, range: 80 },
+  { dmg: 16, arc: 150, range: 104 },
+  { dmg: 24, arc: 360, range: 104 },
 ];
 
 export class Whipblade extends Weapon {
-  slashGraphics: Graphics | null = null;
-  slashTimer = 0;
-  slashDuration = 0.15;
-
   constructor() {
     super('whipblade', 'Whipblade');
   }
 
+  private get stats(): WhipbladeLevel {
+    return LEVELS[this.level - 1];
+  }
+
   getCooldown(player: Player): number {
-    return 1.2 * (1 - player.stats.cooldownReduction);
+    return 1.2 * (1 - (player.stats?.cooldownReduction ?? 0));
   }
 
   fire(player: Player, enemies: Enemy[], game: Game): void {
-    const lvl = LEVELS[this.level - 1];
-    const arcRad = lvl.arcAngle * DEG_TO_RAD;
-    const halfArc = arcRad / 2;
-    const range = lvl.range;
-    const hitSet = new Set<number>();
+    const { dmg, arc, range } = this.stats;
+    const halfArc = (arc / 2) * DEG_TO_RAD;
+    const facing = player.facingAngle ?? 0;
 
-    // Query spatial hash for enemies in range
-    const nearby = game.enemyHash.query(player.x, player.y, range);
+    // Query spatial hash for nearby enemies
+    const nearby = game.enemyHash.query(player.x, player.y, range) as Enemy[];
+    let hitCount = 0;
 
-    for (const entity of nearby) {
-      const enemy = entity as Enemy;
-      if (!enemy.active || hitSet.has(enemy.id)) continue;
-
+    for (const enemy of nearby) {
+      if (!enemy.active || !enemy.isAlive()) continue;
       const dist = distance(player.x, player.y, enemy.x, enemy.y);
       if (dist > range + enemy.radius) continue;
 
-      // Check angle
-      if (lvl.arcAngle < 360) {
-        const toEnemy = Math.atan2(enemy.y - player.y, enemy.x - player.x);
-        const diff = Math.abs(angleDiff(player.facingAngle, toEnemy));
+      // Check arc (360 = full circle, skip angle check)
+      if (arc < 360) {
+        const toEnemy = angle(player.x, player.y, enemy.x, enemy.y);
+        const diff = Math.abs(angleDiff(facing, toEnemy));
         if (diff > halfArc) continue;
       }
 
-      hitSet.add(enemy.id);
-
-      const isCrit = Math.random() < player.stats.critChance;
-      const dmg = calculateDamage(lvl.damage, player.stats.damage, enemy.armor, isCrit, player.stats.critDamage);
-      game.damageEnemy(enemy, dmg, isCrit, player.x, player.y);
+      const isCrit = Math.random() < (player.stats?.critChance ?? 0.05);
+      const damage = calculateDamage(dmg, player.stats?.damage ?? 1, enemy.armor ?? 0, isCrit, player.stats?.critDamage ?? 1.5);
+      game.damageEnemy(enemy, damage, isCrit, player.x, player.y);
+      hitCount++;
     }
 
-    // Visual slash
-    this.showSlash(player, lvl.arcAngle, range, game);
-    playSound('weapon_slash');
+    // Visual slash effect
+    this.showSlashEffect(player, game, facing, halfArc, range, arc >= 360);
+
+    if (hitCount > 0) {
+      playSound('weapon_slash');
+    }
   }
 
-  private showSlash(player: Player, arcAngle: number, range: number, game: Game): void {
-    if (this.slashGraphics) {
-      this.slashGraphics.removeFromParent();
+  private showSlashEffect(player: Player, game: Game, facing: number, halfArc: number, range: number, fullCircle: boolean): void {
+    const gfx = new Graphics();
+    gfx.x = player.x;
+    gfx.y = player.y;
+
+    if (fullCircle) {
+      // Full circle slash
+      gfx.circle(0, 0, range);
+      gfx.stroke({ width: 4, color: 0x00e5ff, alpha: 0.8 });
+      gfx.circle(0, 0, range - 4);
+      gfx.stroke({ width: 2, color: 0xffffff, alpha: 0.6 });
+    } else {
+      // Arc slash
+      const startAngle = facing - halfArc;
+      const endAngle = facing + halfArc;
+
+      gfx.moveTo(0, 0);
+      gfx.arc(0, 0, range, startAngle, endAngle);
+      gfx.closePath();
+      gfx.fill({ color: 0x00e5ff, alpha: 0.15 });
+
+      gfx.arc(0, 0, range, startAngle, endAngle);
+      gfx.stroke({ width: 3, color: 0x00e5ff, alpha: 0.8 });
+
+      gfx.arc(0, 0, range * 0.95, startAngle, endAngle);
+      gfx.stroke({ width: 2, color: 0xffffff, alpha: 0.5 });
     }
 
-    const g = new Graphics();
-    const arcRad = arcAngle * DEG_TO_RAD;
-    const startAngle = player.facingAngle - arcRad / 2;
+    game.layers.effects.addChild(gfx);
 
-    g.moveTo(0, 0);
-    g.arc(0, 0, range, startAngle, startAngle + arcRad);
-    g.lineTo(0, 0);
-    g.fill({ color: 0xffffff, alpha: 0.3 });
-    g.stroke({ color: 0xffffff, width: 2, alpha: 0.5 });
-
-    g.position.set(player.x, player.y);
-    game.layers.effects.addChild(g);
-    this.slashGraphics = g;
-    this.slashTimer = this.slashDuration;
-  }
-
-  update(dt: number, player: Player, enemies: Enemy[], game: Game): void {
-    super.update(dt, player, enemies, game);
-
-    // Fade out slash
-    if (this.slashTimer > 0) {
-      this.slashTimer -= dt;
-      if (this.slashGraphics) {
-        this.slashGraphics.alpha = this.slashTimer / this.slashDuration;
-        if (this.slashTimer <= 0) {
-          this.slashGraphics.removeFromParent();
-          this.slashGraphics = null;
-        }
+    // Fade out over 0.15s
+    const startTime = performance.now();
+    const duration = 150;
+    const fade = () => {
+      const elapsed = performance.now() - startTime;
+      const t = Math.min(1, elapsed / duration);
+      gfx.alpha = 1 - t;
+      if (t < 1) {
+        requestAnimationFrame(fade);
+      } else {
+        gfx.removeFromParent();
+        gfx.destroy();
       }
-    }
-  }
-
-  getLevelDescription(): string {
-    const lvl = LEVELS[this.level - 1];
-    if (this.level === 5) return 'Void Reaper: 360deg slash';
-    return `Dmg:${lvl.damage} Arc:${lvl.arcAngle}deg Range:${lvl.range}`;
+    };
+    requestAnimationFrame(fade);
   }
 }

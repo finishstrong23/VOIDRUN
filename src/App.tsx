@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { Game } from './game/Game';
 import { useGameState } from './ui/hooks/useGameState';
 import { useWakeLock } from './ui/hooks/useWakeLock';
 import { initAudio } from './utils/sound';
 import { isMobileDevice } from './utils/device';
+import { LoadingScreen } from './ui/screens/LoadingScreen';
 import { TitleScreen } from './ui/screens/TitleScreen';
 import { ClassSelect } from './ui/screens/ClassSelect';
 import { GameHUD } from './ui/screens/GameHUD';
@@ -16,17 +17,15 @@ import type { Upgrade } from './types';
 
 export const App: React.FC = () => {
   const gameRef = useRef<Game | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const {
     screen, setScreen,
     pendingUpgrades, setPendingUpgrades,
     startRun, endRun, syncRunState,
     setMobile,
   } = useGameState();
+  const prevScreenRef = useRef(screen);
 
-  const prevScreen = useRef(screen);
-
-  // Wake lock when playing
   useWakeLock(screen === 'playing');
 
   // Initialize game engine
@@ -36,12 +35,25 @@ export const App: React.FC = () => {
 
     initAudio();
     setMobile(isMobileDevice());
+    setScreen('loading');
 
     const game = new Game();
     gameRef.current = game;
 
+    // Simulate loading progress
+    setLoadingProgress(0.1);
+    const progressInterval = setInterval(() => {
+      setLoadingProgress(p => Math.min(p + 0.08, 0.85));
+    }, 200);
+
     game.init(container).then(() => {
-      // Set up callbacks
+      clearInterval(progressInterval);
+      setLoadingProgress(1.0);
+
+      setTimeout(() => {
+        setScreen('title');
+      }, 500);
+
       game.setOnStateSync((state) => {
         syncRunState(state as Parameters<typeof syncRunState>[0]);
       });
@@ -58,26 +70,32 @@ export const App: React.FC = () => {
       });
 
       game.setOnBossSpawn((name, hp, maxHP) => {
-        syncRunState({ activeBoss: { name, hp, maxHP } });
+        syncRunState({ activeBoss: { name, hp, maxHP } } as Parameters<typeof syncRunState>[0]);
       });
 
       game.setOnBossUpdate((hp) => {
         const state = useGameState.getState();
         if (state.activeBoss) {
-          syncRunState({ activeBoss: { ...state.activeBoss, hp } });
+          syncRunState({ activeBoss: { ...state.activeBoss, hp } } as Parameters<typeof syncRunState>[0]);
         }
       });
 
       game.setOnBossDeath(() => {
-        syncRunState({ activeBoss: null });
+        syncRunState({ activeBoss: null } as Parameters<typeof syncRunState>[0]);
       });
     });
 
     return () => {
+      clearInterval(progressInterval);
       game.destroy();
       gameRef.current = null;
     };
   }, []);
+
+  // Track previous screen for settings back navigation
+  useEffect(() => {
+    if (screen !== 'settings') prevScreenRef.current = screen;
+  }, [screen]);
 
   const handleClassSelect = useCallback((classId: string) => {
     startRun(classId);
@@ -107,54 +125,37 @@ export const App: React.FC = () => {
   }, [setScreen, endRun]);
 
   const handlePlayAgain = useCallback(() => {
-    const classId = useGameState.getState().selectedClass;
+    const classId = useGameState.getState().selectedClass ?? 'voidwalker';
     startRun(classId);
     gameRef.current?.startRun(classId);
   }, [startRun]);
 
-  const handleMenu = useCallback(() => {
-    setScreen('title');
-  }, [setScreen]);
+  const handleDash = useCallback(() => {
+    gameRef.current?.triggerDash();
+  }, []);
 
   return (
     <>
-      <div id="game-canvas-container" ref={containerRef} />
+      <div id="game-canvas-container" />
       <div id="ui-overlay">
+        {screen === 'loading' && <LoadingScreen progress={loadingProgress} />}
         {screen === 'title' && <TitleScreen />}
-
         {screen === 'class_select' && (
           <ClassSelect onSelect={handleClassSelect} onBack={() => setScreen('title')} />
         )}
-
-        {screen === 'playing' && (
-          <GameHUD onPause={handlePause} />
-        )}
-
+        {screen === 'playing' && <GameHUD onPause={handlePause} onDash={handleDash} />}
         {screen === 'upgrade_select' && pendingUpgrades.length > 0 && (
           <UpgradeSelect options={pendingUpgrades} onSelect={handleUpgradeSelect} />
         )}
-
         {screen === 'paused' && (
-          <PauseMenu
-            onResume={handleResume}
-            onQuit={handleQuit}
-            onSettings={() => setScreen('settings')}
-          />
+          <PauseMenu onResume={handleResume} onQuit={handleQuit} onSettings={() => setScreen('settings')} />
         )}
-
         {screen === 'dead' && (
-          <DeathScreen onPlayAgain={handlePlayAgain} onMenu={handleMenu} />
+          <DeathScreen onPlayAgain={handlePlayAgain} onMenu={() => setScreen('title')} />
         )}
-
-        {screen === 'stats' && (
-          <StatsScreen onBack={() => setScreen('title')} />
-        )}
-
+        {screen === 'stats' && <StatsScreen onBack={() => setScreen('title')} />}
         {screen === 'settings' && (
-          <SettingsScreen onBack={() => {
-            const prev = prevScreen.current;
-            setScreen(prev === 'paused' ? 'paused' : 'title');
-          }} />
+          <SettingsScreen onBack={() => setScreen(prevScreenRef.current === 'paused' ? 'paused' : 'title')} />
         )}
       </div>
     </>

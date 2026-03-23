@@ -1,39 +1,54 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+
+const baseStyle: React.CSSProperties = {
+  fontFamily: "'Press Start 2P', monospace",
+};
 
 export const FPSCounter: React.FC = () => {
   const [fps, setFps] = useState(60);
+  const framesRef = useRef(0);
+  const lastTimeRef = useRef(performance.now());
 
   useEffect(() => {
-    let frames = 0;
-    let lastTime = performance.now();
-    let id: number;
+    let rafId: number;
 
-    const measure = () => {
-      frames++;
+    const tick = () => {
+      framesRef.current++;
       const now = performance.now();
-      if (now - lastTime >= 1000) {
-        setFps(frames);
-        frames = 0;
-        lastTime = now;
+      const elapsed = now - lastTimeRef.current;
+
+      if (elapsed >= 1000) {
+        setFps(Math.round((framesRef.current * 1000) / elapsed));
+        framesRef.current = 0;
+        lastTimeRef.current = now;
       }
-      id = requestAnimationFrame(measure);
+
+      rafId = requestAnimationFrame(tick);
     };
-    id = requestAnimationFrame(measure);
-    return () => cancelAnimationFrame(id);
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
   }, []);
 
+  const color = fps >= 50 ? '#30d158' : fps >= 30 ? '#ff9f0a' : '#ff2d55';
+
   return (
-    <span style={{
-      fontSize: '8px',
-      color: fps < 30 ? '#ef4444' : fps < 50 ? '#eab308' : '#22c55e',
-      fontFamily: "'Press Start 2P', monospace",
-      position: 'absolute',
-      top: 4,
-      left: '50%',
-      transform: 'translateX(-50%)',
-      opacity: 0.6,
-    }}>
-      {fps}FPS
-    </span>
+    <div
+      style={{
+        ...baseStyle,
+        position: 'fixed',
+        top: 4,
+        right: 4,
+        fontSize: 7,
+        color,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        padding: '2px 4px',
+        borderRadius: 2,
+        zIndex: 200,
+        pointerEvents: 'none',
+      }}
+    >
+      {fps} FPS
+    </div>
   );
 };

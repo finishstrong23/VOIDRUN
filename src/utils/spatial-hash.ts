@@ -6,12 +6,11 @@ export class SpatialHash {
   private cells: Map<number, Entity[]> = new Map();
 
   clear(): void {
-    this.cells.forEach(cell => cell.length = 0);
+    this.cells.forEach(cell => (cell.length = 0));
   }
 
   private key(cx: number, cy: number): number {
-    // Pack two 16-bit ints into one 32-bit number for faster map lookups
-    return ((cx & 0xFFFF) << 16) | (cy & 0xFFFF);
+    return ((cx & 0xffff) << 16) | (cy & 0xffff);
   }
 
   insert(entity: Entity): void {
@@ -23,10 +22,7 @@ export class SpatialHash {
       for (let cy = minCY; cy <= maxCY; cy++) {
         const k = this.key(cx, cy);
         let cell = this.cells.get(k);
-        if (!cell) {
-          cell = [];
-          this.cells.set(k, cell);
-        }
+        if (!cell) { cell = []; this.cells.set(k, cell); }
         cell.push(entity);
       }
     }
@@ -45,10 +41,7 @@ export class SpatialHash {
         if (cell) {
           for (let i = 0; i < cell.length; i++) {
             const e = cell[i];
-            if (!seen.has(e.id)) {
-              seen.add(e.id);
-              results.push(e);
-            }
+            if (!seen.has(e.id)) { seen.add(e.id); results.push(e); }
           }
         }
       }

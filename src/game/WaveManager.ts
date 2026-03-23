@@ -1,147 +1,322 @@
+import { WAVES, WAVE_CONFIG } from '../data/waves';
 import { ENEMIES } from '../data/enemies';
-import { WAVE_CONFIG, WORLD } from '../data/balance';
-import { randomRange, randomInt, TWO_PI } from '../utils/math';
-import type { Enemy } from '../entities/Enemy';
-import type { Game } from './Game';
+import type { EnemyDef, WaveDef } from '../types';
+
+export type WaveState = 'spawning' | 'clearing' | 'complete' | 'boss_warning' | 'between_waves';
+
+export interface SpawnRequest {
+  def: EnemyDef;
+  x: number;
+  y: number;
+  hpScale: number;
+  dmgScale: number;
+}
+
+export interface WaveCallbacks {
+  onSpawn(request: SpawnRequest): void;
+  onWaveComplete(waveNumber: number): void;
+  onBossWarning(bossType: string): void;
+  onAllWavesComplete(): void;
+  onVacuumGems(): void;
+  getEnemyCount(): number;
+  getMaxEnemies(): number;
+}
 
 export class WaveManager {
-  private spawnAccumulator = 0;
-  private despawnCheckTimer = 0;
-  private bossTimer = 0;
-  private bossCount = 0;
-  gameTime = 0;
+  state: WaveState = 'between_waves';
+  currentWave = 0;
+  enemiesRemaining = 0;
+  totalEnemiesInWave = 0;
+  waveProgress = 0; // 0-1 progress through spawning phase
 
-  update(dt: number, game: Game): void {
-    this.gameTime += dt;
-    this.bossTimer += dt;
+  private spawnTimer = 0;
+  private spawnInterval = 0;
+  private spawnQueue: Array<{ type: string; count: number }> = [];
+  private spawnedSoFar = 0;
+  private totalToSpawn = 0;
 
-    // Calculate current spawn rate
-    const spawnRate = Math.min(
-      WAVE_CONFIG.spawnRateMax,
-      WAVE_CONFIG.spawnRateBase + WAVE_CONFIG.spawnRateRamp * this.gameTime
-    );
+  private betweenTimer = 0;
+  private bossWarningTimer = 0;
 
-    // Spawn enemies
-    const maxEnemies = game.isMobile ? WAVE_CONFIG.maxEnemiesOnScreenMobile : WAVE_CONFIG.maxEnemiesOnScreen;
-    this.spawnAccumulator += spawnRate * dt;
+  private bossType: string | null = null;
+  private bossSpawned = false;
+  private bossKillThreshold = 0;
+  private initialEnemiesForBoss = 0;
 
-    while (this.spawnAccumulator >= 1 && game.activeEnemies.length < maxEnemies) {
-      this.spawnAccumulator -= 1;
-      this.spawnEnemy(game);
-    }
+  private callbacks: WaveCallbacks;
+  private viewportWidth = 0;
+  private viewportHeight = 0;
+  private playerX = 0;
+  private playerY = 0;
 
-    // Boss spawning
-    if (this.bossTimer >= WAVE_CONFIG.bossIntervalSeconds) {
-      this.bossTimer -= WAVE_CONFIG.bossIntervalSeconds;
-      this.bossCount++;
-      this.spawnBoss(game);
-    }
+  private hpScale = 1;
+  private dmgScale = 1;
 
-    // Despawn check every second
-    this.despawnCheckTimer += dt;
-    if (this.despawnCheckTimer >= 1) {
-      this.despawnCheckTimer = 0;
-      this.despawnFarEnemies(game);
+  constructor(callbacks: WaveCallbacks) {
+    this.callbacks = callbacks;
+  }
+
+  start(): void {
+    this.currentWave = 0;
+    this.state = 'between_waves';
+    this.betweenTimer = 1; // Short initial delay
+  }
+
+  setViewport(width: number, height: number): void {
+    this.viewportWidth = width;
+    this.viewportHeight = height;
+  }
+
+  setPlayerPosition(x: number, y: number): void {
+    this.playerX = x;
+    this.playerY = y;
+  }
+
+  update(dt: number): void {
+    switch (this.state) {
+      case 'between_waves':
+        this.updateBetweenWaves(dt);
+        break;
+      case 'boss_warning':
+        this.updateBossWarning(dt);
+        break;
+      case 'spawning':
+        this.updateSpawning(dt);
+        break;
+      case 'clearing':
+        this.updateClearing(dt);
+        break;
+      case 'complete':
+        break;
     }
   }
 
-  private getAvailableTypes(): string[] {
-    let types: string[] = ['grunt'];
-    for (const entry of WAVE_CONFIG.unlockSchedule) {
-      if (this.gameTime >= entry.time) {
-        types = entry.types;
-      }
+  private updateBetweenWaves(dt: number): void {
+    this.betweenTimer -= dt;
+    if (this.betweenTimer <= 0) {
+      this.callbacks.onVacuumGems();
+      this.startNextWave();
     }
-    return types;
   }
 
-  private getScaling(): { hpScale: number; dmgScale: number } {
-    const minutes = this.gameTime / 60;
-    const scale = Math.pow(WAVE_CONFIG.statScalePerMinute, minutes);
-    return { hpScale: scale, dmgScale: scale };
+  private updateBossWarning(dt: number): void {
+    this.bossWarningTimer -= dt;
+    if (this.bossWarningTimer <= 0) {
+      // Spawn the boss
+      this.spawnBoss();
+      this.state = 'clearing';
+    }
   }
 
-  private spawnEnemy(game: Game): void {
-    const types = this.getAvailableTypes();
-    const { hpScale, dmgScale } = this.getScaling();
+  private updateSpawning(dt: number): void {
+    if (this.spawnQueue.length === 0 && this.spawnedSoFar >= this.totalToSpawn) {
+      // All enemies spawned, wait for clearing
+      this.state = 'clearing';
+      return;
+    }
 
-    // Weighted random selection
-    const available = types.filter(t => !ENEMIES[t].isBoss);
-    if (available.length === 0) return;
+    this.spawnTimer -= dt;
 
-    const totalWeight = available.reduce((sum, t) => sum + ENEMIES[t].spawnWeight, 0);
-    let roll = Math.random() * totalWeight;
-    let selectedType = available[0];
-    for (const t of available) {
-      roll -= ENEMIES[t].spawnWeight;
-      if (roll <= 0) {
-        selectedType = t;
+    while (this.spawnTimer <= 0 && this.spawnQueue.length > 0) {
+      // Check enemy cap
+      if (this.callbacks.getEnemyCount() >= this.callbacks.getMaxEnemies()) {
+        this.spawnTimer = 0.1; // Retry shortly
         break;
       }
-    }
 
-    // Spawn position: random point on circle outside viewport
-    const { x, y } = this.getSpawnPosition(game);
-
-    if (selectedType === 'swarmer') {
-      // Spawn a pack
-      const packSize = randomInt(WAVE_CONFIG.swarmerPackMin, WAVE_CONFIG.swarmerPackMax);
-      for (let i = 0; i < packSize && game.activeEnemies.length < (game.isMobile ? WAVE_CONFIG.maxEnemiesOnScreenMobile : WAVE_CONFIG.maxEnemiesOnScreen); i++) {
-        const offsetX = randomRange(-30, 30);
-        const offsetY = randomRange(-30, 30);
-        game.spawnEnemy(ENEMIES[selectedType], x + offsetX, y + offsetY, hpScale, dmgScale);
+      const entry = this.spawnQueue[0];
+      const typeName = entry.type;
+      const def = ENEMIES[typeName];
+      if (!def) {
+        this.spawnQueue.shift();
+        continue;
       }
-    } else {
-      game.spawnEnemy(ENEMIES[selectedType], x, y, hpScale, dmgScale);
+
+      // Swarmers spawn in packs of 6-10
+      const isSwarmer = typeName === 'swarmer';
+      const batchSize = isSwarmer ? Math.min(entry.count, 6 + Math.floor(Math.random() * 5)) : 1;
+
+      for (let i = 0; i < batchSize; i++) {
+        const pos = this.getSpawnPosition();
+        this.callbacks.onSpawn({
+          def,
+          x: pos.x,
+          y: pos.y,
+          hpScale: this.hpScale,
+          dmgScale: this.dmgScale,
+        });
+        this.spawnedSoFar++;
+        this.enemiesRemaining++;
+        entry.count--;
+      }
+
+      if (entry.count <= 0) {
+        this.spawnQueue.shift();
+      }
+
+      this.spawnTimer += this.spawnInterval;
+    }
+
+    this.waveProgress = this.totalToSpawn > 0 ? this.spawnedSoFar / this.totalToSpawn : 1;
+
+    // Check boss wave: spawn boss when 50% minions killed
+    this.checkBossSpawnCondition();
+  }
+
+  private updateClearing(_dt: number): void {
+    // Check if all enemies are dead
+    const remaining = this.callbacks.getEnemyCount();
+    this.enemiesRemaining = remaining;
+
+    if (remaining <= 0) {
+      this.callbacks.onWaveComplete(this.currentWave);
+
+      // Check if all predefined waves done
+      if (this.currentWave >= WAVES.length && !this.isProceduralWave()) {
+        // Continue with procedural waves
+      }
+
+      this.state = 'between_waves';
+      this.betweenTimer = WAVE_CONFIG.betweenWavesPause;
     }
   }
 
-  private spawnBoss(game: Game): void {
-    const { hpScale, dmgScale } = this.getScaling();
-    const bossHpScale = hpScale * Math.pow(1.5 / WAVE_CONFIG.statScalePerMinute, this.gameTime / 60);
-    const bossDmgScale = dmgScale * Math.pow(1.5 / WAVE_CONFIG.statScalePerMinute, this.gameTime / 60);
+  private startNextWave(): void {
+    this.currentWave++;
+    const waveDef = this.getWaveDef(this.currentWave);
 
-    const bossType = this.bossCount % 2 === 1 ? 'boss_charger' : 'boss_nova';
-    const { x, y } = this.getSpawnPosition(game);
+    this.bossType = waveDef.bossType ?? null;
+    this.bossSpawned = false;
+    this.spawnedSoFar = 0;
 
-    game.spawnEnemy(ENEMIES[bossType], x, y, bossHpScale, bossDmgScale);
+    // Build spawn queue
+    this.spawnQueue = [];
+    let total = 0;
+    for (const [type, count] of Object.entries(waveDef.enemies)) {
+      this.spawnQueue.push({ type, count });
+      total += count;
+    }
+    this.totalToSpawn = total;
+    this.totalEnemiesInWave = total + (this.bossType ? 1 : 0);
+    this.enemiesRemaining = 0;
 
-    // Camera shake for boss spawn
-    game.camera.shake(8, 0.3);
+    // Calculate spawn interval to spread enemies over spawnDuration
+    this.spawnInterval = waveDef.spawnDuration / Math.max(total, 1);
+    this.spawnTimer = 0;
+
+    // Procedural scaling
+    if (this.currentWave > WAVES.length) {
+      const extra = this.currentWave - WAVES.length;
+      this.hpScale = Math.pow(WAVE_CONFIG.proceduralStatScalePerWave, extra);
+      this.dmgScale = Math.pow(WAVE_CONFIG.proceduralStatScalePerWave, extra);
+    } else {
+      this.hpScale = 1;
+      this.dmgScale = 1;
+    }
+
+    // Boss threshold: track initial enemies so we know when 50% are killed
+    if (this.bossType) {
+      this.initialEnemiesForBoss = total;
+      this.bossKillThreshold = Math.floor(total * WAVE_CONFIG.bossSpawnAtPercent);
+    }
+
+    this.waveProgress = 0;
+    this.state = 'spawning';
   }
 
-  private getSpawnPosition(game: Game): { x: number; y: number } {
-    const angle = Math.random() * TWO_PI;
-    const vw = game.camera.viewportWidth / 2 + WORLD.SPAWN_MARGIN;
-    const vh = game.camera.viewportHeight / 2 + WORLD.SPAWN_MARGIN;
-    const r = Math.max(vw, vh);
+  private getWaveDef(waveNum: number): WaveDef {
+    if (waveNum <= WAVES.length) {
+      return WAVES[waveNum - 1];
+    }
+
+    // Procedural wave generation after wave 10
+    const baseWave = WAVES[WAVES.length - 1];
+    const extraWaves = waveNum - WAVES.length;
+    const scale = Math.pow(WAVE_CONFIG.proceduralScalePerWave, extraWaves);
+
+    const enemies: Record<string, number> = {};
+    for (const [type, count] of Object.entries(baseWave.enemies)) {
+      enemies[type] = Math.ceil(count * scale);
+    }
+
+    // Every 3rd procedural wave is a boss wave
+    const isBoss = extraWaves % 3 === 0;
+
     return {
-      x: game.player.x + Math.cos(angle) * r,
-      y: game.player.y + Math.sin(angle) * r,
+      wave: waveNum,
+      enemies,
+      spawnDuration: baseWave.spawnDuration + extraWaves * 2,
+      bossWave: isBoss,
+      bossType: isBoss ? (extraWaves % 6 === 0 ? 'boss_nova' : 'boss_charger') : undefined,
     };
   }
 
-  private despawnFarEnemies(game: Game): void {
-    const px = game.player.x;
-    const py = game.player.y;
-    const maxDist = WORLD.ENEMY_DESPAWN_DISTANCE;
-    const maxDistSq = maxDist * maxDist;
+  private isProceduralWave(): boolean {
+    return this.currentWave > WAVES.length;
+  }
 
-    for (let i = game.activeEnemies.length - 1; i >= 0; i--) {
-      const enemy = game.activeEnemies[i];
-      const dx = enemy.x - px;
-      const dy = enemy.y - py;
-      if (dx * dx + dy * dy > maxDistSq) {
-        game.releaseEnemy(enemy, false); // No XP drop
-      }
+  private checkBossSpawnCondition(): void {
+    if (!this.bossType || this.bossSpawned) return;
+
+    const killed = this.spawnedSoFar - this.callbacks.getEnemyCount();
+    if (killed >= this.bossKillThreshold) {
+      // Trigger boss warning
+      this.callbacks.onBossWarning(this.bossType);
+      this.bossWarningTimer = WAVE_CONFIG.bossWarningTime;
+      this.bossSpawned = true;
+      this.state = 'boss_warning';
     }
   }
 
-  reset(): void {
-    this.spawnAccumulator = 0;
-    this.despawnCheckTimer = 0;
-    this.bossTimer = 0;
-    this.bossCount = 0;
-    this.gameTime = 0;
+  private spawnBoss(): void {
+    if (!this.bossType) return;
+
+    const def = ENEMIES[this.bossType];
+    if (!def) return;
+
+    const pos = this.getSpawnPosition();
+    this.callbacks.onSpawn({
+      def,
+      x: pos.x,
+      y: pos.y,
+      hpScale: this.hpScale,
+      dmgScale: this.dmgScale,
+    });
+    this.enemiesRemaining++;
+
+    // Resume spawning remaining enemies
+    if (this.spawnQueue.length > 0) {
+      this.state = 'spawning';
+    } else {
+      this.state = 'clearing';
+    }
+  }
+
+  private getSpawnPosition(): { x: number; y: number } {
+    const margin = 150; // SPAWN_MARGIN from balance WORLD
+    const halfW = this.viewportWidth * 0.5 + margin;
+    const halfH = this.viewportHeight * 0.5 + margin;
+
+    // Spawn on a circle beyond viewport edge
+    const angle = Math.random() * Math.PI * 2;
+    const rx = halfW;
+    const ry = halfH;
+
+    return {
+      x: this.playerX + Math.cos(angle) * rx,
+      y: this.playerY + Math.sin(angle) * ry,
+    };
+  }
+
+  onEnemyKilled(): void {
+    this.enemiesRemaining = Math.max(0, this.enemiesRemaining - 1);
+  }
+
+  getWaveNumber(): number {
+    return this.currentWave;
+  }
+
+  isComplete(): boolean {
+    return this.state === 'complete';
   }
 }

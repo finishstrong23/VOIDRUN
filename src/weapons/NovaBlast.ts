@@ -1,92 +1,99 @@
-import { Graphics } from 'pixi.js';
 import { Weapon } from './Weapon';
-import { calculateDamage } from '../data/balance';
+import { Graphics } from 'pixi.js';
 import { distance } from '../utils/math';
+import { calculateDamage } from '../data/balance';
 import { playSound } from '../utils/sound';
 import type { Player } from '../entities/Player';
 import type { Enemy } from '../entities/Enemy';
 import type { Game } from '../game/Game';
 
-const LEVELS = [
-  { damage: 25, radius: 100, cooldown: 3.0, burnDPS: 0, burnDuration: 0 },
-  { damage: 25, radius: 125, cooldown: 3.0, burnDPS: 0, burnDuration: 0 },
-  { damage: 35, radius: 125, cooldown: 3.0, burnDPS: 0, burnDuration: 0 },
-  { damage: 35, radius: 125, cooldown: 2.25, burnDPS: 0, burnDuration: 0 },
-  { damage: 35, radius: 188, cooldown: 2.25, burnDPS: 5, burnDuration: 3 },
+interface NovaBlastLevel {
+  dmg: number;
+  radius: number;
+  cd: number;
+}
+
+const LEVELS: NovaBlastLevel[] = [
+  { dmg: 25, radius: 100, cd: 3.0 },
+  { dmg: 25, radius: 125, cd: 3.0 },
+  { dmg: 35, radius: 125, cd: 3.0 },
+  { dmg: 35, radius: 125, cd: 2.25 },
+  { dmg: 35, radius: 188, cd: 2.25 },
 ];
 
 export class NovaBlast extends Weapon {
-  novaGraphics: Graphics | null = null;
-  novaTimer = 0;
-  novaDuration = 0.3;
-
   constructor() {
-    super('novaBlast', 'Nova Blast');
+    super('nova_blast', 'Nova Blast');
+  }
+
+  private get stats(): NovaBlastLevel {
+    return LEVELS[this.level - 1];
   }
 
   getCooldown(player: Player): number {
-    const lvl = LEVELS[this.level - 1];
-    return lvl.cooldown * (1 - player.stats.cooldownReduction);
+    return this.stats.cd * (1 - (player.stats?.cooldownReduction ?? 0));
   }
 
-  fire(player: Player, _enemies: Enemy[], game: Game): void {
-    const lvl = LEVELS[this.level - 1];
-    const hitSet = new Set<number>();
+  fire(player: Player, enemies: Enemy[], game: Game): void {
+    const { dmg, radius } = this.stats;
 
-    const nearby = game.enemyHash.query(player.x, player.y, lvl.radius);
-    for (const entity of nearby) {
-      const enemy = entity as Enemy;
-      if (!enemy.active || hitSet.has(enemy.id)) continue;
+    // Hit all enemies in radius
+    const nearby = game.enemyHash.query(player.x, player.y, radius) as Enemy[];
+    let hitCount = 0;
 
+    for (const enemy of nearby) {
+      if (!enemy.active || !enemy.isAlive()) continue;
       const dist = distance(player.x, player.y, enemy.x, enemy.y);
-      if (dist > lvl.radius + enemy.radius) continue;
+      if (dist > radius + enemy.radius) continue;
 
-      hitSet.add(enemy.id);
-
-      const isCrit = Math.random() < player.stats.critChance;
-      const dmg = calculateDamage(lvl.damage, player.stats.damage, enemy.armor, isCrit, player.stats.critDamage);
-      game.damageEnemy(enemy, dmg, isCrit, player.x, player.y);
+      const isCrit = Math.random() < (player.stats?.critChance ?? 0.05);
+      const damage = calculateDamage(dmg, player.stats?.damage ?? 1, enemy.armor ?? 0, isCrit, player.stats?.critDamage ?? 1.5);
+      game.damageEnemy(enemy, damage, isCrit, player.x, player.y);
+      hitCount++;
     }
 
-    this.showNova(player, lvl.radius, game);
+    // Expanding ring visual
+    this.showNovaEffect(player, game, radius);
+
     playSound('weapon_boom');
   }
 
-  private showNova(player: Player, radius: number, game: Game): void {
-    if (this.novaGraphics) {
-      this.novaGraphics.removeFromParent();
-    }
+  private showNovaEffect(player: Player, game: Game, maxRadius: number): void {
+    const gfx = new Graphics();
+    gfx.x = player.x;
+    gfx.y = player.y;
+    game.layers.effects.addChild(gfx);
 
-    const g = new Graphics();
-    g.circle(0, 0, radius);
-    g.fill({ color: 0xff6600, alpha: 0.3 });
-    g.stroke({ color: 0xff8800, width: 3, alpha: 0.6 });
-    g.position.set(player.x, player.y);
-    game.layers.effects.addChild(g);
-    this.novaGraphics = g;
-    this.novaTimer = this.novaDuration;
-  }
+    const startTime = performance.now();
+    const duration = 300;
 
-  update(dt: number, player: Player, enemies: Enemy[], game: Game): void {
-    super.update(dt, player, enemies, game);
+    const animate = () => {
+      const elapsed = performance.now() - startTime;
+      const t = Math.min(1, elapsed / duration);
+      const currentRadius = maxRadius * t;
+      const alpha = 1 - t;
 
-    if (this.novaTimer > 0) {
-      this.novaTimer -= dt;
-      if (this.novaGraphics) {
-        const progress = 1 - this.novaTimer / this.novaDuration;
-        this.novaGraphics.alpha = 1 - progress;
-        this.novaGraphics.scale.set(0.5 + progress * 0.5);
-        if (this.novaTimer <= 0) {
-          this.novaGraphics.removeFromParent();
-          this.novaGraphics = null;
-        }
+      gfx.clear();
+
+      // Expanding fill
+      gfx.circle(0, 0, currentRadius);
+      gfx.fill({ color: 0xff2d55, alpha: alpha * 0.15 });
+
+      // Expanding ring
+      gfx.circle(0, 0, currentRadius);
+      gfx.stroke({ width: 3, color: 0xff2d55, alpha: alpha * 0.8 });
+
+      // Inner bright ring
+      gfx.circle(0, 0, currentRadius * 0.9);
+      gfx.stroke({ width: 2, color: 0xff6b8a, alpha: alpha * 0.5 });
+
+      if (t < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        gfx.removeFromParent();
+        gfx.destroy();
       }
-    }
-  }
-
-  getLevelDescription(): string {
-    const lvl = LEVELS[this.level - 1];
-    if (this.level === 5) return 'Supernova: Burning zone 5 DPS 3s';
-    return `Dmg:${lvl.damage} Radius:${lvl.radius} CD:${lvl.cooldown}s`;
+    };
+    requestAnimationFrame(animate);
   }
 }

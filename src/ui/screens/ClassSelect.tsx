@@ -1,64 +1,128 @@
 import React from 'react';
 import { CLASSES } from '../../data/classes';
-import { WEAPON_DEFS } from '../../weapons/WeaponRegistry';
 
-interface Props {
+interface ClassSelectProps {
   onSelect: (classId: string) => void;
   onBack: () => void;
 }
 
-export const ClassSelect: React.FC<Props> = ({ onSelect, onBack }) => {
+const baseStyle: React.CSSProperties = {
+  fontFamily: "'Press Start 2P', monospace",
+};
+
+const WEAPON_NAMES: Record<string, string> = {
+  whipblade: 'Whipblade',
+  voidOrbs: 'Void Orbs',
+  plasmaLance: 'Plasma Lance',
+};
+
+export const ClassSelect: React.FC<ClassSelectProps> = ({ onSelect, onBack }) => {
   return (
-    <div className="flex flex-col items-center justify-center h-full p-4"
-      style={{ fontFamily: "'Press Start 2P', monospace" }}>
-      <h2 style={{ fontSize: '14px', color: '#fff', marginBottom: 24 }}>
+    <div
+      style={{
+        ...baseStyle,
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: '#0f1923',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        padding: '40px 16px',
+        gap: 20,
+        zIndex: 900,
+        overflowY: 'auto',
+      }}
+    >
+      {/* Header */}
+      <h2
+        style={{
+          fontSize: 16,
+          color: '#e8edf2',
+          margin: 0,
+          letterSpacing: 3,
+          textShadow: '0 0 10px rgba(0,229,255,0.3)',
+        }}
+      >
         SELECT CLASS
       </h2>
 
-      <div className="flex flex-col gap-3 w-full" style={{ maxWidth: 360 }}>
-        {CLASSES.map(cls => {
-          const hex = '#' + cls.color.toString(16).padStart(6, '0');
-          const weaponName = WEAPON_DEFS[cls.startingWeapon]?.name || cls.startingWeapon;
-          return (
-            <button
-              key={cls.id}
-              onClick={() => onSelect(cls.id)}
-              className="rounded p-4 text-left"
+      {/* Class cards */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          width: '100%',
+          maxWidth: 340,
+        }}
+      >
+        {CLASSES.map((cls) => (
+          <button
+            key={cls.id}
+            onClick={() => onSelect(cls.id)}
+            style={{
+              ...baseStyle,
+              width: '100%',
+              backgroundColor: 'rgba(28,42,58,0.85)',
+              border: `2px solid ${cls.accent}`,
+              borderRadius: 8,
+              padding: '16px 14px',
+              cursor: 'pointer',
+              textAlign: 'left',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              outline: 'none',
+              WebkitTapHighlightColor: 'transparent',
+              boxShadow: `0 0 12px ${cls.accent}22, inset 0 0 20px ${cls.accent}08`,
+            }}
+          >
+            <span
               style={{
-                backgroundColor: 'rgba(0,0,0,0.6)',
-                border: `2px solid ${hex}`,
-                cursor: 'pointer',
-                fontFamily: "'Press Start 2P', monospace",
-                touchAction: 'manipulation',
+                fontSize: 12,
+                color: cls.accent,
+                textShadow: `0 0 8px ${cls.accent}66`,
               }}
             >
-              <div style={{ fontSize: '12px', color: hex, marginBottom: 4 }}>
-                {cls.name}
-              </div>
-              <div style={{ fontSize: '7px', color: '#aaa', marginBottom: 6 }}>
-                {cls.tagline}
-              </div>
-              <div style={{ fontSize: '7px', color: '#666' }}>
-                Weapon: {weaponName}
-              </div>
-            </button>
-          );
-        })}
+              {cls.name}
+            </span>
+            <span
+              style={{
+                fontSize: 8,
+                color: '#7a8fa0',
+                lineHeight: 1.4,
+              }}
+            >
+              {cls.tagline}
+            </span>
+            <span
+              style={{
+                fontSize: 7,
+                color: '#e8edf2',
+                opacity: 0.7,
+              }}
+            >
+              Weapon: {WEAPON_NAMES[cls.startingWeapon] || cls.startingWeapon}
+            </span>
+          </button>
+        ))}
       </div>
 
+      {/* Back button */}
       <button
         onClick={onBack}
-        className="mt-6"
         style={{
+          ...baseStyle,
           backgroundColor: 'transparent',
-          color: '#666',
-          fontSize: '8px',
-          border: '1px solid #333',
-          padding: '8px 16px',
+          color: '#7a8fa0',
+          border: '1px solid rgba(45,74,94,0.4)',
+          borderRadius: 6,
+          padding: '10px 24px',
           cursor: 'pointer',
-          fontFamily: "'Press Start 2P', monospace",
-          borderRadius: 4,
-          touchAction: 'manipulation',
+          fontSize: 9,
+          outline: 'none',
+          WebkitTapHighlightColor: 'transparent',
+          marginTop: 8,
         }}
       >
         BACK

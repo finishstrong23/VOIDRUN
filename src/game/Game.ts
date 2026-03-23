@@ -16,23 +16,24 @@ import { XPGem } from '../entities/XPGem';
 import { DamageNumber } from '../entities/DamageNumber';
 import { SpatialHash } from '../utils/spatial-hash';
 import { ObjectPool } from '../utils/object-pool';
-import { KNOCKBACK, xpForLevel, calculateScore, WORLD } from '../data/balance';
+import { KNOCKBACK, xpForLevel, calculateScore, WORLD, DASH } from '../data/balance';
 import { CLASSES } from '../data/classes';
 import { isMobileDevice, getPerformanceTier } from '../utils/device';
 import { playSound, haptic } from '../utils/sound';
 import { createWeapon } from '../weapons/WeaponRegistry';
+import { spriteFactory } from '../sprites/SpriteFactory';
 import type { Weapon } from '../weapons/Weapon';
 import type { EnemyDef, Upgrade, QualityTier } from '../types';
 
 const TICK_RATE = 60;
 const TICK_MS = 1000 / TICK_RATE;
-const SYNC_INTERVAL = 100; // ms
+const SYNC_INTERVAL = 100;
 
 export class Game {
   renderer: PixiRenderer;
   camera: Camera;
   input: InputManager;
-  joystick: TouchJoystick;
+  joystick!: TouchJoystick;
   world!: World;
   waveManager: WaveManager;
   upgradeManager: UpgradeManager;
@@ -56,7 +57,6 @@ export class Game {
   damageNumberPool: ObjectPool<DamageNumber>;
 
   layers!: RenderLayers;
-
   isMobile: boolean;
   isRunning = false;
   isPaused = false;
@@ -73,14 +73,22 @@ export class Game {
   private onBossSpawn: ((name: string, hp: number, maxHP: number) => void) | null = null;
   private onBossUpdate: ((hp: number) => void) | null = null;
   private onBossDeath: (() => void) | null = null;
+  private onWaveStateChange: ((state: string, wave: number, remaining: number, progress: number) => void) | null = null;
 
   constructor() {
     this.isMobile = isMobileDevice();
     this.renderer = new PixiRenderer();
     this.camera = new Camera();
     this.input = new InputManager();
-    this.joystick = null!; // Set in init
-    this.waveManager = new WaveManager();
+    this.waveManager = new WaveManager({
+      onSpawn: (req) => this.spawnEnemy(req.def, req.x, req.y, req.hpScale, req.dmgScale),
+      onWaveComplete: (waveNumber) => { this.runState.completeWave(waveNumber); },
+      onBossWarning: (_bossType) => { /* handled via onBossSpawn */ },
+      onAllWavesComplete: () => { /* endless mode */ },
+      onVacuumGems: () => this.vacuumGems(),
+      getEnemyCount: () => this.activeEnemies.length,
+      getMaxEnemies: () => this.quality.getMaxEnemies(),
+    });
     this.upgradeManager = new UpgradeManager();
     this.collisionSystem = new CollisionSystem();
     this.runState = new RunState();
@@ -92,79 +100,58 @@ export class Game {
     this.enemyHash = new SpatialHash();
     this.gemHash = new SpatialHash();
 
-    // Object pools
-    this.enemyPool = new ObjectPool<Enemy>(
-      () => new Enemy(),
-      (e) => e.reset(),
-      200
-    );
-    this.projectilePool = new ObjectPool<Projectile>(
-      () => new Projectile(),
-      (p) => p.reset(),
-      100
-    );
-    this.gemPool = new ObjectPool<XPGem>(
-      () => new XPGem(),
-      (g) => g.reset(),
-      300
-    );
-    this.damageNumberPool = new ObjectPool<DamageNumber>(
-      () => new DamageNumber(),
-      (d) => d.reset(),
-      50
-    );
+    this.enemyPool = new ObjectPool<Enemy>(() => new Enemy(), (e) => e.reset(), 200);
+    this.projectilePool = new ObjectPool<Projectile>(() => new Projectile(), (p) => p.reset(), 100);
+    this.gemPool = new ObjectPool<XPGem>(() => new XPGem(), (g) => g.reset(), 300);
+    this.damageNumberPool = new ObjectPool<DamageNumber>(() => new DamageNumber(), (d) => d.reset(), 50);
   }
 
   async init(container: HTMLElement): Promise<void> {
-    await this.renderer.init(container);
+    await this.renderer.init(container as HTMLCanvasElement);
     this.layers = this.renderer.layers;
 
-    this.input.init();
-    this.joystick = new TouchJoystick(this.layers.joystick, this.isMobile);
-    this.joystick.init(this.renderer.app.canvas as HTMLCanvasElement);
+    // Generate all sprites
+    await spriteFactory.generateAll(this.renderer.app.renderer);
 
-    this.world = new World(this.layers.background);
+    this.input.init();
+    this.joystick = new TouchJoystick(this.layers.joystick);
+
+    this.world = new World(this.layers.ground, this.layers.props, this.layers.vignette);
 
     this.camera.viewportWidth = window.innerWidth;
     this.camera.viewportHeight = window.innerHeight;
 
     window.addEventListener('resize', this.handleResize);
-    window.addEventListener('orientationchange', () => {
-      setTimeout(this.handleResize, 150);
-    });
+    window.addEventListener('orientationchange', () => setTimeout(this.handleResize, 150));
   }
 
   private handleResize = (): void => {
-    this.renderer.resize();
     this.camera.viewportWidth = window.innerWidth;
     this.camera.viewportHeight = window.innerHeight;
-    this.joystick.updateBounds(window.innerWidth, window.innerHeight);
+    this.joystick.resize(window.innerWidth, window.innerHeight);
   };
 
-  // Callbacks
   setOnStateSync(cb: (state: Record<string, unknown>) => void): void { this.onStateSync = cb; }
   setOnLevelUp(cb: (options: Upgrade[]) => void): void { this.onLevelUp = cb; }
   setOnPlayerDeath(cb: () => void): void { this.onPlayerDeath = cb; }
   setOnBossSpawn(cb: (name: string, hp: number, maxHP: number) => void): void { this.onBossSpawn = cb; }
   setOnBossUpdate(cb: (hp: number) => void): void { this.onBossUpdate = cb; }
   setOnBossDeath(cb: () => void): void { this.onBossDeath = cb; }
+  setOnWaveStateChange(cb: (state: string, wave: number, remaining: number, progress: number) => void): void { this.onWaveStateChange = cb; }
 
   startRun(classId: string): void {
     const classDef = CLASSES.find(c => c.id === classId);
     if (!classDef) return;
 
-    // Reset everything
     this.cleanupRun();
-
     this.runState.start(classId);
     this.player.init(classDef);
     this.layers.player.addChild(this.player.sprite!);
 
-    // Starting weapon
     const weapon = createWeapon(classDef.startingWeapon);
     this.weapons.push(weapon);
 
-    this.waveManager.reset();
+    this.waveManager.start();
     this.upgradeManager.reset();
 
     this.isRunning = true;
@@ -177,44 +164,24 @@ export class Game {
   }
 
   private cleanupRun(): void {
-    // Release all entities
-    for (const e of this.activeEnemies) {
-      e.reset();
-      this.enemyPool.release(e);
-    }
+    for (const e of this.activeEnemies) { e.reset(); this.enemyPool.release(e); }
     this.activeEnemies = [];
-
-    for (const p of this.activeProjectiles) {
-      p.reset();
-      this.projectilePool.release(p);
-    }
+    for (const p of this.activeProjectiles) { p.reset(); this.projectilePool.release(p); }
     this.activeProjectiles = [];
-
-    for (const g of this.activeGems) {
-      g.reset();
-      this.gemPool.release(g);
-    }
+    for (const g of this.activeGems) { g.reset(); this.gemPool.release(g); }
     this.activeGems = [];
-
-    for (const d of this.activeDamageNumbers) {
-      d.reset();
-      this.damageNumberPool.release(d);
-    }
+    for (const d of this.activeDamageNumbers) { d.reset(); this.damageNumberPool.release(d); }
     this.activeDamageNumbers = [];
-
-    // Reset weapons
-    for (const w of this.weapons) {
-      w.reset();
-    }
+    for (const w of this.weapons) w.reset();
     this.weapons = [];
 
-    // Clear layers
     this.layers.enemies.removeChildren();
     this.layers.projectiles.removeChildren();
     this.layers.gems.removeChildren();
     this.layers.effects.removeChildren();
     this.layers.damageNumbers.removeChildren();
     this.layers.player.removeChildren();
+    this.layers.shadows.removeChildren();
   }
 
   private startLoop(): void {
@@ -228,30 +195,22 @@ export class Game {
   }
 
   stopLoop(): void {
-    if (this.animFrameId) {
-      cancelAnimationFrame(this.animFrameId);
-      this.animFrameId = 0;
-    }
+    if (this.animFrameId) { cancelAnimationFrame(this.animFrameId); this.animFrameId = 0; }
   }
 
   private frame(currentTime: number): void {
     let delta = currentTime - this.lastTime;
     this.lastTime = currentTime;
-
-    // Cap to prevent spiral of death
     if (delta > 500) delta = TICK_MS;
 
-    this.quality.recordFrame();
+    // quality tracking handled in update()
 
     if (this.isRunning && !this.isPaused) {
-      // Apply slow motion
       if (this.slowMotionTimer > 0) {
         this.slowMotionTimer -= delta / 1000;
         delta *= this.slowMotionScale;
       }
-
       this.accumulator += delta;
-
       while (this.accumulator >= TICK_MS) {
         this.update(TICK_MS / 1000);
         this.accumulator -= TICK_MS;
@@ -263,12 +222,10 @@ export class Game {
   }
 
   private update(dt: number): void {
-    // Input
     this.input.update();
     this.joystick.update(dt);
     this.input.setJoystickInput(this.joystick.inputX, this.joystick.inputY);
 
-    // Pause check
     if (this.input.isEscapePressed()) {
       this.input.consumeEscape();
       this.pause();
@@ -276,73 +233,51 @@ export class Game {
     }
 
     // Player movement
-    this.player.vx = this.input.moveX * this.player.stats.speed;
-    this.player.vy = this.input.moveY * this.player.stats.speed;
+    if (!this.player.isDashing) {
+      this.player.vx = this.input.moveX * this.player.stats.speed;
+      this.player.vy = this.input.moveY * this.player.stats.speed;
+    }
     this.player.update(dt);
 
-    // Camera
     this.camera.follow(this.player.x, this.player.y);
     this.camera.update(dt);
 
-    // Wave spawning
-    this.waveManager.update(dt, this);
+    // Wave manager
+    this.waveManager.setViewport(this.camera.viewportWidth, this.camera.viewportHeight);
+    this.waveManager.setPlayerPosition(this.player.x, this.player.y);
+    this.waveManager.update(dt);
     this.runState.timeAlive += dt;
 
-    // Update enemies + AI
+    // Enemies
     this.updateEnemies(dt);
 
-    // Update weapons
+    // Weapons
     for (const weapon of this.weapons) {
       weapon.update(dt, this.player, this.activeEnemies, this);
     }
 
-    // Update projectiles
+    // Projectiles
     this.updateProjectiles(dt);
 
     // Spatial hash rebuild
     this.enemyHash.clear();
-    for (const e of this.activeEnemies) {
-      if (e.active) this.enemyHash.insert(e);
-    }
-
+    for (const e of this.activeEnemies) { if (e.active) this.enemyHash.insert(e); }
     this.gemHash.clear();
-    for (const g of this.activeGems) {
-      if (g.active) this.gemHash.insert(g);
-    }
+    for (const g of this.activeGems) { if (g.active) this.gemHash.insert(g); }
 
     // Collisions
-    this.collisionSystem.checkPlayerEnemyCollisions(
-      this.player, this.enemyHash,
-      (damage) => this.handlePlayerHit(damage)
-    );
-
-    this.collisionSystem.checkProjectileEnemyCollisions(
-      this.activeProjectiles, this.enemyHash, this.player,
+    this.collisionSystem.checkPlayerEnemyCollisions(this.player, this.enemyHash, (damage) => this.handlePlayerHit(damage));
+    this.collisionSystem.checkProjectileEnemyCollisions(this.activeProjectiles, this.enemyHash, this.player,
       (enemy, damage, isCrit, fromX, fromY) => this.damageEnemy(enemy, damage, isCrit, fromX, fromY),
-      (proj) => this.releaseProjectile(proj)
-    );
+      (proj) => this.releaseProjectile(proj));
+    this.collisionSystem.checkEnemyProjectilePlayerCollisions(this.activeProjectiles, this.player,
+      (damage) => this.handlePlayerHit(damage), (proj) => this.releaseProjectile(proj));
+    this.collisionSystem.checkGemPickup(this.player, this.activeGems, (gem) => this.collectGem(gem));
 
-    this.collisionSystem.checkEnemyProjectilePlayerCollisions(
-      this.activeProjectiles, this.player,
-      (damage) => this.handlePlayerHit(damage),
-      (proj) => this.releaseProjectile(proj)
-    );
-
-    this.collisionSystem.checkGemPickup(
-      this.player, this.activeGems,
-      (gem) => this.collectGem(gem)
-    );
-
-    // Update gems
     this.updateGems(dt);
-
-    // Update damage numbers
     this.updateDamageNumbers(dt);
-
-    // Quality system
     this.quality.update(dt);
 
-    // Sync state to React
     this.syncTimer += dt * 1000;
     if (this.syncTimer >= SYNC_INTERVAL) {
       this.syncTimer = 0;
@@ -354,8 +289,6 @@ export class Game {
     for (let i = this.activeEnemies.length - 1; i >= 0; i--) {
       const enemy = this.activeEnemies[i];
       if (!enemy.active) continue;
-
-      // AI
       this.updateEnemyAI(enemy, dt);
       enemy.update(dt);
     }
@@ -363,143 +296,80 @@ export class Game {
 
   private updateEnemyAI(enemy: Enemy, dt: number): void {
     if (enemy.knockbackTimer > 0) return;
-
-    const px = this.player.x;
-    const py = this.player.y;
-    const dx = px - enemy.x;
-    const dy = py - enemy.y;
+    const px = this.player.x, py = this.player.y;
+    const dx = px - enemy.x, dy = py - enemy.y;
     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-    const nx = dx / dist;
-    const ny = dy / dist;
+    const nx = dx / dist, ny = dy / dist;
 
     switch (enemy.ai) {
       case 'chase':
         enemy.vx = nx * enemy.speed;
         enemy.vy = ny * enemy.speed;
         break;
-
       case 'swarm': {
-        // Flocking with separation
         let sepX = 0, sepY = 0;
         for (const other of this.activeEnemies) {
           if (other === enemy || other.ai !== 'swarm' || !other.active) continue;
-          const sdx = enemy.x - other.x;
-          const sdy = enemy.y - other.y;
+          const sdx = enemy.x - other.x, sdy = enemy.y - other.y;
           const sdist = Math.sqrt(sdx * sdx + sdy * sdy);
-          if (sdist < 30 && sdist > 0) {
-            sepX += sdx / sdist;
-            sepY += sdy / sdist;
-          }
+          if (sdist < 30 && sdist > 0) { sepX += sdx / sdist; sepY += sdy / sdist; }
         }
-        const dirX = nx * 0.85 + sepX * 0.15;
-        const dirY = ny * 0.85 + sepY * 0.15;
+        const dirX = nx * 0.85 + sepX * 0.15, dirY = ny * 0.85 + sepY * 0.15;
         const dirLen = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
         enemy.vx = (dirX / dirLen) * enemy.speed;
         enemy.vy = (dirY / dirLen) * enemy.speed;
         break;
       }
-
       case 'ranged':
         enemy.rangedCooldown -= dt;
-        if (dist > 200) {
-          enemy.vx = nx * enemy.speed;
-          enemy.vy = ny * enemy.speed;
-        } else if (dist < 120) {
-          // Flee
-          enemy.vx = -nx * enemy.speed * 1.2;
-          enemy.vy = -ny * enemy.speed * 1.2;
-        } else {
-          enemy.vx = 0;
-          enemy.vy = 0;
-          // Shoot
+        if (dist > 200) { enemy.vx = nx * enemy.speed; enemy.vy = ny * enemy.speed; }
+        else if (dist < 120) { enemy.vx = -nx * enemy.speed * 1.2; enemy.vy = -ny * enemy.speed * 1.2; }
+        else {
+          enemy.vx = 0; enemy.vy = 0;
           if (enemy.rangedCooldown <= 0) {
             enemy.rangedCooldown = 2;
-            const angle = Math.atan2(dy, dx);
-            this.spawnProjectile(enemy.x, enemy.y, angle + Math.PI, 250, 10, 0, 6, false, 0x22d3ee);
+            this.spawnProjectile(enemy.x, enemy.y, Math.atan2(-dy, -dx), 250, 10, 0, 6, false, 0xff2d55);
           }
         }
         break;
-
       case 'boss_charge': {
         enemy.aiTimer -= dt;
         if (enemy.aiPhase === 0) {
-          // Chase
-          enemy.vx = nx * enemy.speed;
-          enemy.vy = ny * enemy.speed;
-          if (enemy.aiTimer <= 0) {
-            enemy.aiPhase = 1;
-            enemy.aiTimer = 0.8;
-            enemy.targetX = px;
-            enemy.targetY = py;
-          }
+          enemy.vx = nx * enemy.speed; enemy.vy = ny * enemy.speed;
+          if (enemy.aiTimer <= 0) { enemy.aiPhase = 1; enemy.aiTimer = 0.8; enemy.targetX = px; enemy.targetY = py; }
         } else if (enemy.aiPhase === 1) {
-          // Telegraph (flash)
-          enemy.vx = 0;
-          enemy.vy = 0;
-          enemy.flashTimer = dt * 2;
+          enemy.vx = 0; enemy.vy = 0; enemy.flashTimer = dt * 2;
           if (enemy.aiTimer <= 0) {
-            enemy.aiPhase = 2;
-            enemy.aiTimer = 1;
-            const cdx = enemy.targetX - enemy.x;
-            const cdy = enemy.targetY - enemy.y;
+            enemy.aiPhase = 2; enemy.aiTimer = 1;
+            const cdx = enemy.targetX - enemy.x, cdy = enemy.targetY - enemy.y;
             const cdist = Math.sqrt(cdx * cdx + cdy * cdy) || 1;
-            enemy.vx = (cdx / cdist) * 500;
-            enemy.vy = (cdy / cdist) * 500;
+            enemy.vx = (cdx / cdist) * 500; enemy.vy = (cdy / cdist) * 500;
           }
         } else if (enemy.aiPhase === 2) {
-          // Charging
-          if (enemy.aiTimer <= 0) {
-            enemy.aiPhase = 3;
-            enemy.aiTimer = 2;
-            enemy.vx = 0;
-            enemy.vy = 0;
-          }
+          if (enemy.aiTimer <= 0) { enemy.aiPhase = 3; enemy.aiTimer = 2; enemy.vx = 0; enemy.vy = 0; }
         } else {
-          // Recovery
-          enemy.vx = 0;
-          enemy.vy = 0;
-          if (enemy.aiTimer <= 0) {
-            enemy.aiPhase = 0;
-            enemy.aiTimer = 4;
-          }
+          enemy.vx = 0; enemy.vy = 0;
+          if (enemy.aiTimer <= 0) { enemy.aiPhase = 0; enemy.aiTimer = 4; }
         }
         break;
       }
-
       case 'boss_nova': {
         enemy.aiTimer -= dt;
         if (enemy.aiPhase === 0) {
-          // Chase
-          const chaseSpeed = enemy.isEnraged ? 100 : enemy.speed;
-          enemy.vx = nx * chaseSpeed;
-          enemy.vy = ny * chaseSpeed;
-          if (enemy.aiTimer <= 0) {
-            enemy.aiPhase = 1;
-            enemy.aiTimer = 0.5;
-          }
+          const spd = enemy.isEnraged ? 100 : enemy.speed;
+          enemy.vx = nx * spd; enemy.vy = ny * spd;
+          if (enemy.aiTimer <= 0) { enemy.aiPhase = 1; enemy.aiTimer = 0.5; }
         } else if (enemy.aiPhase === 1) {
-          // Telegraph + nova
-          enemy.vx = 0;
-          enemy.vy = 0;
+          enemy.vx = 0; enemy.vy = 0;
           if (enemy.aiTimer <= 0) {
-            // Fire radial projectiles
             const count = enemy.isEnraged ? 24 : 12;
-            const angleStep = (Math.PI * 2) / count;
-            for (let i = 0; i < count; i++) {
-              const a = angleStep * i;
-              this.spawnProjectile(enemy.x, enemy.y, a, 180, 15, 0, 6, false, 0xeab308);
-            }
-            enemy.aiPhase = 2;
-            enemy.aiTimer = 1;
+            const step = (Math.PI * 2) / count;
+            for (let i = 0; i < count; i++) this.spawnProjectile(enemy.x, enemy.y, step * i, 180, 15, 0, 6, false, 0xbf5af2);
+            enemy.aiPhase = 2; enemy.aiTimer = 1;
           }
         } else {
-          // Pause
-          enemy.vx = 0;
-          enemy.vy = 0;
-          if (enemy.aiTimer <= 0) {
-            enemy.aiPhase = 0;
-            enemy.aiTimer = 5;
-          }
+          enemy.vx = 0; enemy.vy = 0;
+          if (enemy.aiTimer <= 0) { enemy.aiPhase = 0; enemy.aiTimer = 5; }
         }
         break;
       }
@@ -511,23 +381,16 @@ export class Game {
       const proj = this.activeProjectiles[i];
       if (!proj.active) continue;
 
-      // Homing
       if (proj.homing && proj.isPlayerProjectile) {
-        let nearest: Enemy | null = null;
-        let nearestDist = 300;
+        let nearest: Enemy | null = null, nearestDist = 300;
         for (const enemy of this.activeEnemies) {
           if (!enemy.active) continue;
-          const dx = enemy.x - proj.x;
-          const dy = enemy.y - proj.y;
-          const d = Math.sqrt(dx * dx + dy * dy);
-          if (d < nearestDist) {
-            nearestDist = d;
-            nearest = enemy;
-          }
+          const d = Math.sqrt((enemy.x - proj.x) ** 2 + (enemy.y - proj.y) ** 2);
+          if (d < nearestDist) { nearestDist = d; nearest = enemy; }
         }
         if (nearest) {
-          const targetAngle = Math.atan2(nearest.y - proj.y, nearest.x - proj.x);
-          let diff = targetAngle - proj.angle;
+          const ta = Math.atan2(nearest.y - proj.y, nearest.x - proj.x);
+          let diff = ta - proj.angle;
           while (diff > Math.PI) diff -= Math.PI * 2;
           while (diff < -Math.PI) diff += Math.PI * 2;
           proj.angle += Math.sign(diff) * Math.min(Math.abs(diff), 3 * dt);
@@ -537,39 +400,21 @@ export class Game {
       }
 
       proj.update(dt);
-
-      if (proj.isExpired()) {
-        this.releaseProjectile(proj);
-      }
-
-      // Update visual position
-      if (proj.sprite) {
-        proj.sprite.position.set(proj.x, proj.y);
-      }
+      if (proj.isExpired()) this.releaseProjectile(proj);
+      if (proj.sprite) proj.sprite.position.set(proj.x, proj.y);
     }
   }
 
   private updateGems(dt: number): void {
-    // Cap gems
-    while (this.activeGems.length > WORLD.GEM_MAX_ON_SCREEN) {
-      const oldest = this.activeGems[0];
-      this.releaseGem(oldest);
-    }
+    while (this.activeGems.length > WORLD.GEM_MAX_ON_SCREEN) this.releaseGem(this.activeGems[0]);
 
     for (let i = this.activeGems.length - 1; i >= 0; i--) {
       const gem = this.activeGems[i];
       if (!gem.active) continue;
-
       gem.update(dt);
-
-      if (gem.isExpired()) {
-        this.releaseGem(gem);
-        continue;
-      }
-
+      if (gem.isExpired()) { this.releaseGem(gem); continue; }
       if (gem.sprite) {
         gem.sprite.position.set(gem.x, gem.y);
-        // Sparkle rotation
         gem.sprite.rotation = Math.sin(gem.sparklePhase) * 0.3;
       }
     }
@@ -577,57 +422,42 @@ export class Game {
 
   private updateDamageNumbers(dt: number): void {
     for (let i = this.activeDamageNumbers.length - 1; i >= 0; i--) {
-      const dmgNum = this.activeDamageNumbers[i];
-      if (!dmgNum.active) continue;
-
-      dmgNum.update(dt);
-
-      if (dmgNum.isExpired()) {
-        dmgNum.reset();
-        this.damageNumberPool.release(dmgNum);
-        this.activeDamageNumbers.splice(i, 1);
-        continue;
-      }
-
-      if (dmgNum.sprite) {
-        dmgNum.sprite.position.set(dmgNum.x, dmgNum.y);
-      }
+      const dn = this.activeDamageNumbers[i];
+      if (!dn.active) continue;
+      dn.update(dt);
+      if (dn.isExpired()) { dn.reset(); this.damageNumberPool.release(dn); this.activeDamageNumbers.splice(i, 1); continue; }
+      if (dn.sprite) dn.sprite.position.set(dn.x, dn.y);
     }
   }
 
   private render(alpha: number): void {
-    // Update camera transform
     this.renderer.updateCamera(this.camera.x, this.camera.y, this.camera.shakeX, this.camera.shakeY);
+    this.world.update(this.camera.left, this.camera.top, this.camera.right, this.camera.bottom);
 
-    // Draw world grid
-    this.world.render(this.camera);
-
-    // Update player visual
+    // Player visual
     if (this.player.sprite) {
       const rx = this.player.prevX + (this.player.x - this.player.prevX) * alpha;
       const ry = this.player.prevY + (this.player.y - this.player.prevY) * alpha;
       this.player.sprite.position.set(rx, ry);
+      this.player.updateSprite();
 
-      // Moving scale
       const isMoving = this.player.vx !== 0 || this.player.vy !== 0;
-      this.player.sprite.scale.set(isMoving ? 1.1 : 1.0);
+      const baseScale = 0.5;
+      this.player.sprite.scale.set(isMoving ? baseScale * 1.05 : baseScale);
 
-      // i-frame flash
-      if (this.player.isInvincible) {
+      if (this.player.isInvincible && !this.player.isDashing) {
         this.player.sprite.visible = Math.floor(performance.now() / 100) % 2 === 0;
       } else {
         this.player.sprite.visible = true;
       }
     }
 
-    // Update enemy visuals
-    for (const enemy of this.activeEnemies) {
-      enemy.updateVisuals(alpha);
-    }
+    // Enemy visuals
+    for (const enemy of this.activeEnemies) enemy.updateVisuals(alpha);
   }
 
-  // Public methods for spawning
-  spawnEnemy(def: EnemyDef, x: number, y: number, hpScale: number = 1, dmgScale: number = 1): void {
+  // ── Public spawn methods ──
+  spawnEnemy(def: EnemyDef, x: number, y: number, hpScale = 1, dmgScale = 1): void {
     const enemy = this.enemyPool.acquire();
     enemy.init(def, x, y, hpScale, dmgScale);
     this.layers.enemies.addChild(enemy.sprite!);
@@ -636,26 +466,20 @@ export class Game {
     if (def.isBoss) {
       playSound('boss_warning');
       haptic('heavy');
+      this.camera.shake(8, 0.3);
       this.onBossSpawn?.(def.name, enemy.hp, enemy.maxHP);
     }
   }
 
-  releaseEnemy(enemy: Enemy, dropXP: boolean = true): void {
-    if (dropXP && enemy.xpValue > 0) {
-      this.spawnGem(enemy.x, enemy.y, enemy.xpValue);
-    }
+  releaseEnemy(enemy: Enemy, dropXP = true): void {
+    if (dropXP && enemy.xpValue > 0) this.spawnGem(enemy.x, enemy.y, enemy.xpValue);
     enemy.reset();
     this.enemyPool.release(enemy);
     const idx = this.activeEnemies.indexOf(enemy);
     if (idx >= 0) this.activeEnemies.splice(idx, 1);
   }
 
-  spawnProjectile(
-    x: number, y: number, angle: number,
-    speed: number, damage: number, pierce: number,
-    radius: number, isPlayer: boolean, color: number = 0xffffff,
-    homing: boolean = false
-  ): void {
+  spawnProjectile(x: number, y: number, angle: number, speed: number, damage: number, pierce: number, radius: number, isPlayer: boolean, color = 0xffffff, homing = false): void {
     const proj = this.projectilePool.acquire();
     proj.init(x, y, angle, speed, damage, pierce, radius, isPlayer, color, homing);
     this.layers.projectiles.addChild(proj.sprite!);
@@ -684,36 +508,29 @@ export class Game {
   }
 
   spawnDamageNumber(x: number, y: number, damage: number, isCrit: boolean): void {
-    if (!this.quality.preset.damageNumbersEnabled) return;
-
-    const dmgNum = this.damageNumberPool.acquire();
-    dmgNum.init(x, y, damage, isCrit);
-    this.layers.damageNumbers.addChild(dmgNum.sprite!);
-    this.activeDamageNumbers.push(dmgNum);
+    if (!this.quality.currentPreset.damageNumbersEnabled) return;
+    const dn = this.damageNumberPool.acquire();
+    dn.init(x, y, damage, isCrit);
+    this.layers.damageNumbers.addChild(dn.sprite!);
+    this.activeDamageNumbers.push(dn);
   }
 
   damageEnemy(enemy: Enemy, damage: number, isCrit: boolean, fromX: number, fromY: number): void {
     const killed = enemy.takeDamage(damage);
     enemy.flash();
-
-    // Knockback
-    enemy.applyKnockback(fromX, fromY, KNOCKBACK.baseForce, KNOCKBACK.duration);
-
-    // Damage number
+    const kbDx = enemy.x - fromX;
+    const kbDy = enemy.y - fromY;
+    const kbDist = Math.sqrt(kbDx * kbDx + kbDy * kbDy) || 1;
+    enemy.applyKnockback((kbDx / kbDist) * KNOCKBACK.baseForce, (kbDy / kbDist) * KNOCKBACK.baseForce, KNOCKBACK.duration);
     this.spawnDamageNumber(enemy.x, enemy.y - enemy.radius, damage, isCrit);
-
     playSound('enemy_hit');
 
-    if (killed) {
-      this.onEnemyKilled(enemy);
-    } else if (enemy.isBoss) {
-      this.onBossUpdate?.(enemy.hp);
-    }
+    if (killed) this.onEnemyKilled(enemy);
+    else if (enemy.isBoss) this.onBossUpdate?.(enemy.hp);
   }
 
   private onEnemyKilled(enemy: Enemy): void {
     playSound('enemy_death');
-
     if (enemy.isBoss) {
       this.camera.shake(6, 0.2);
       playSound('boss_death');
@@ -721,22 +538,18 @@ export class Game {
       this.runState.bossKills++;
       this.onBossDeath?.();
     }
-
     this.runState.killCount++;
+    this.waveManager.onEnemyKilled();
     this.releaseEnemy(enemy, true);
   }
 
   private handlePlayerHit(damage: number): void {
-    const actualDamage = this.player.applyDamage(damage);
-    if (actualDamage === 0) return;
-
+    if (this.player.isInvincible) return;
+    const dead = this.player.applyDamage(damage);
     playSound('player_hit');
     haptic('medium');
     this.camera.shake(3, 0.1);
-
-    if (this.player.isDead()) {
-      this.handlePlayerDeath();
-    }
+    if (dead) this.handlePlayerDeath();
   }
 
   private collectGem(gem: XPGem): void {
@@ -744,26 +557,30 @@ export class Game {
     this.runState.xp += xp;
     playSound('xp_pickup');
 
-    // Check level up
     while (this.runState.xp >= this.runState.xpToNext) {
       this.runState.xp -= this.runState.xpToNext;
       this.runState.playerLevel++;
       this.runState.xpToNext = xpForLevel(this.runState.playerLevel);
       this.triggerLevelUp();
     }
-
     this.releaseGem(gem);
+  }
+
+  // Vacuum all gems to player (between waves)
+  vacuumGems(): void {
+    for (const gem of this.activeGems) {
+      if (gem.active) {
+        gem.isMagnetized = true;
+        gem.magnetSpeed = 800;
+      }
+    }
   }
 
   private triggerLevelUp(): void {
     playSound('level_up');
     haptic('light');
-
-    // Slow motion effect
     this.slowMotionTimer = 0.4;
     this.slowMotionScale = 0.3;
-
-    // Generate upgrade options
     const options = this.upgradeManager.generateOptions(this.weapons, this.runState.playerLevel);
     this.onLevelUp?.(options);
   }
@@ -771,47 +588,43 @@ export class Game {
   selectUpgrade(upgrade: Upgrade): void {
     playSound('upgrade_select');
     haptic('light');
-
-    const newWeapon = this.upgradeManager.applyUpgrade(upgrade, this.player, this.weapons);
-    if (newWeapon) {
-      this.weapons.push(newWeapon);
-    }
-
+    this.upgradeManager.applyUpgrade(upgrade, this.player, this.weapons);
     this.isPaused = false;
     this.slowMotionTimer = 0;
     this.slowMotionScale = 1;
+  }
+
+  triggerDash(): void {
+    if (this.player.startDash()) {
+      playSound('dash_swoosh');
+      haptic('light');
+    }
   }
 
   private handlePlayerDeath(): void {
     this.isRunning = false;
     haptic('heavy');
     this.camera.shake(8, 0.3);
-
     this.runState.isActive = false;
-
-    // Final sync
     this.syncState();
     this.onPlayerDeath?.();
   }
 
-  pause(): void {
-    this.isPaused = true;
-  }
-
-  resume(): void {
-    this.isPaused = false;
-    this.lastTime = performance.now();
-  }
+  pause(): void { this.isPaused = true; }
+  resume(): void { this.isPaused = false; this.lastTime = performance.now(); }
 
   private syncState(): void {
     if (!this.onStateSync) return;
-
     const boss = this.activeEnemies.find(e => e.isBoss && e.active);
-
     this.onStateSync({
       runTime: this.runState.timeAlive,
       killCount: this.runState.killCount,
       bossKills: this.runState.bossKills,
+      wavesCompleted: this.runState.wavesCompleted,
+      currentWave: this.runState.currentWave,
+      waveState: this.waveManager.state,
+      enemiesRemaining: this.waveManager.enemiesRemaining,
+      waveProgress: this.waveManager.waveProgress,
       playerHP: this.player.hp,
       playerMaxHP: this.player.maxHP,
       playerLevel: this.runState.playerLevel,
@@ -820,6 +633,8 @@ export class Game {
       equippedWeapons: this.weapons.map(w => ({ id: w.id, level: w.level, name: w.name })),
       score: calculateScore(this.runState),
       activeBoss: boss ? { name: boss.typeName, hp: boss.hp, maxHP: boss.maxHP } : null,
+      dashCooldownRemaining: this.player.dashCooldown,
+      dashCooldownMax: DASH.cooldown,
     });
   }
 

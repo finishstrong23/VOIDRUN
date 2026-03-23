@@ -1,56 +1,66 @@
 import { Application, Container } from 'pixi.js';
+import { COLORS } from '../data/balance';
 import { getDevicePixelRatio } from '../utils/device';
 
 export interface RenderLayers {
-  background: Container;
+  ground: Container;
+  props: Container;
+  shadows: Container;
   gems: Container;
   enemies: Container;
   player: Container;
   projectiles: Container;
   effects: Container;
   damageNumbers: Container;
+  vignette: Container;
   joystick: Container;
 }
 
 export class PixiRenderer {
-  app!: Application;
-  layers!: RenderLayers;
-  private worldContainer!: Container;
+  app: Application;
+  worldContainer: Container;
+  layers: RenderLayers;
 
-  async init(container: HTMLElement): Promise<void> {
-    const dpr = getDevicePixelRatio();
+  private resizeObserver: ResizeObserver | null = null;
 
+  constructor() {
     this.app = new Application();
-    await this.app.init({
-      width: window.innerWidth,
-      height: window.innerHeight,
-      resolution: dpr,
-      autoDensity: true,
-      antialias: false,
-      backgroundColor: 0x0a0a0f,
-      powerPreference: 'high-performance',
-    });
-
-    container.appendChild(this.app.canvas);
-
-    // World container (moved by camera)
     this.worldContainer = new Container();
-    this.app.stage.addChild(this.worldContainer);
 
-    // Create layers
+    // Create all render layers
     this.layers = {
-      background: new Container(),
+      ground: new Container(),
+      props: new Container(),
+      shadows: new Container(),
       gems: new Container(),
       enemies: new Container(),
       player: new Container(),
       projectiles: new Container(),
       effects: new Container(),
       damageNumbers: new Container(),
+      vignette: new Container(),
       joystick: new Container(),
     };
+  }
 
-    // Add layers to world container (camera-affected)
-    this.worldContainer.addChild(this.layers.background);
+  async init(canvas: HTMLCanvasElement): Promise<void> {
+    const dpr = getDevicePixelRatio();
+
+    await this.app.init({
+      canvas,
+      resizeTo: window,
+      resolution: dpr,
+      autoDensity: true,
+      backgroundColor: COLORS.BG,
+      antialias: false,
+      powerPreference: 'high-performance',
+    });
+
+    // Build layer hierarchy
+    // World layers: ground through damageNumbers (move with camera)
+    this.worldContainer.addChild(this.layers.ground);
+    this.worldContainer.addChild(this.layers.props);
+    this.worldContainer.addChild(this.layers.shadows);
     this.worldContainer.addChild(this.layers.gems);
     this.worldContainer.addChild(this.layers.enemies);
     this.worldContainer.addChild(this.layers.player);
@@ -58,24 +68,51 @@ export class PixiRenderer {
     this.worldContainer.addChild(this.layers.effects);
     this.worldContainer.addChild(this.layers.damageNumbers);
 
-    // Joystick is in screen space (not affected by camera)
+    this.app.stage.addChild(this.worldContainer);
+
+    // Screen-space layers: vignette and joystick (fixed on screen, not affected by camera)
+    this.app.stage.addChild(this.layers.vignette);
     this.app.stage.addChild(this.layers.joystick);
+
+    // Handle resize
+    this.resizeObserver = new ResizeObserver(() => {
+      this.app.resize();
+    });
+    this.resizeObserver.observe(canvas.parentElement || document.body);
   }
 
+  /**
+   * Update worldContainer position to reflect camera.
+   * Camera x,y is the center of the viewport, so we offset by half the screen.
+   */
   updateCamera(cameraX: number, cameraY: number, shakeX: number, shakeY: number): void {
+    const screenW = this.app.screen.width;
+    const screenH = this.app.screen.height;
+
     this.worldContainer.position.set(
-      -cameraX + window.innerWidth / 2 + shakeX,
-      -cameraY + window.innerHeight / 2 + shakeY
+      -cameraX + screenW * 0.5 + shakeX,
+      -cameraY + screenH * 0.5 + shakeY,
     );
   }
 
-  resize(): void {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    this.app.renderer.resize(width, height);
+  get screenWidth(): number {
+    return this.app.screen.width;
+  }
+
+  get screenHeight(): number {
+    return this.app.screen.height;
+  }
+
+  setResolution(resolution: number): void {
+    this.app.renderer.resolution = resolution;
+    this.app.resize();
   }
 
   destroy(): void {
-    this.app.destroy(true);
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
+    this.app.destroy(true, { children: true, texture: false });
   }
 }
