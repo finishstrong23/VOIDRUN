@@ -1,10 +1,9 @@
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { Game } from './game/Game';
 import { useGameState } from './ui/hooks/useGameState';
 import { useWakeLock } from './ui/hooks/useWakeLock';
 import { initAudio } from './utils/sound';
 import { isMobileDevice } from './utils/device';
-import { LoadingScreen } from './ui/screens/LoadingScreen';
 import { TitleScreen } from './ui/screens/TitleScreen';
 import { ClassSelect } from './ui/screens/ClassSelect';
 import { GameHUD } from './ui/screens/GameHUD';
@@ -17,7 +16,6 @@ import type { Upgrade } from './types';
 
 export const App: React.FC = () => {
   const gameRef = useRef<Game | null>(null);
-  const [loadingProgress, setLoadingProgress] = useState(0);
   const {
     screen, setScreen,
     pendingUpgrades, setPendingUpgrades,
@@ -35,25 +33,14 @@ export const App: React.FC = () => {
 
     initAudio();
     setMobile(isMobileDevice());
-    setScreen('loading');
 
     const game = new Game();
     gameRef.current = game;
 
-    // Simulate loading progress
-    setLoadingProgress(0.1);
-    const progressInterval = setInterval(() => {
-      setLoadingProgress(p => Math.min(p + 0.08, 0.85));
-    }, 200);
+    // Go straight to title, init game in background
+    setScreen('title');
 
     game.init(container).then(() => {
-      clearInterval(progressInterval);
-      setLoadingProgress(1.0);
-
-      setTimeout(() => {
-        setScreen('title');
-      }, 500);
-
       game.setOnStateSync((state) => {
         syncRunState(state as Parameters<typeof syncRunState>[0]);
       });
@@ -84,14 +71,10 @@ export const App: React.FC = () => {
         syncRunState({ activeBoss: null } as Parameters<typeof syncRunState>[0]);
       });
     }).catch((err) => {
-      clearInterval(progressInterval);
       console.error('[VOIDRUN] Game init failed:', err);
-      setLoadingProgress(1.0);
-      setTimeout(() => setScreen('title'), 500);
     });
 
     return () => {
-      clearInterval(progressInterval);
       game.destroy();
       gameRef.current = null;
     };
@@ -143,7 +126,6 @@ export const App: React.FC = () => {
     <>
       <div id="game-canvas-container" />
       <div id="ui-overlay">
-        {screen === 'loading' && <LoadingScreen progress={loadingProgress} />}
         {screen === 'title' && <TitleScreen />}
         {screen === 'class_select' && (
           <ClassSelect onSelect={handleClassSelect} onBack={() => setScreen('title')} />
