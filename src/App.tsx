@@ -75,9 +75,6 @@ export const App: React.FC = () => {
       });
     }).catch((err) => {
       console.error('[VOIDRUN] Game init failed:', err);
-      // Still allow menu navigation even if game fails
-      gameReadyRef.current = true;
-      setGameReady(true);
     });
 
     return () => {

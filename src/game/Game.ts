@@ -107,11 +107,20 @@ export class Game {
   }
 
   async init(container: HTMLElement): Promise<void> {
-    await this.renderer.init(container);
-    this.layers = this.renderer.layers;
+    try {
+      await this.renderer.init(container);
+      this.layers = this.renderer.layers;
+    } catch (e) {
+      console.error('[Game] Renderer init failed:', e);
+      throw e;
+    }
 
-    // Generate all sprites
-    await spriteFactory.generateAll(this.renderer.app.renderer);
+    try {
+      await spriteFactory.generateAll(this.renderer.app.renderer);
+    } catch (e) {
+      console.error('[Game] Sprite generation failed:', e);
+      throw e;
+    }
 
     this.input.init();
     this.joystick = new TouchJoystick(this.layers.joystick);
@@ -123,6 +132,7 @@ export class Game {
 
     window.addEventListener('resize', this.handleResize);
     window.addEventListener('orientationchange', () => setTimeout(this.handleResize, 150));
+    console.log('[Game] Init complete');
   }
 
   private handleResize = (): void => {

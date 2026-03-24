@@ -46,8 +46,15 @@ export class PixiRenderer {
   async init(container: HTMLElement): Promise<void> {
     const dpr = getDevicePixelRatio();
 
-    // Pixi v8: pass the container element, let Pixi create its own canvas
+    // Create a real canvas element for Pixi
+    const canvas = document.createElement('canvas');
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    canvas.style.display = 'block';
+    container.appendChild(canvas);
+
     await this.app.init({
+      canvas,
       resizeTo: window,
       resolution: dpr,
       autoDensity: true,
@@ -55,9 +62,6 @@ export class PixiRenderer {
       antialias: false,
       powerPreference: 'high-performance',
     });
-
-    // Append Pixi's canvas to the container
-    container.appendChild(this.app.canvas);
 
     // Build layer hierarchy
     // World layers: ground through damageNumbers (move with camera)
