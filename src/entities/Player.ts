@@ -47,6 +47,10 @@ export class Player extends Entity {
     this.isMoving = false;
     this.vx = 0;
     this.vy = 0;
+
+    // Create or recreate sprite
+    if (this.sprite) this.sprite.removeFromParent();
+    this.createSprite();
   }
 
   createSprite(): Sprite {

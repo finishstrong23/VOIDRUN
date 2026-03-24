@@ -41,6 +41,9 @@ export class XPGem extends Entity {
 
     this.radius = this.gemSize === 'large' ? 12 : this.gemSize === 'medium' ? 8 : 6;
     this.hp = 1; this.maxHP = 1;
+
+    if (this.sprite) this.sprite.removeFromParent();
+    this.createSprite();
   }
 
   createSprite(): Sprite {

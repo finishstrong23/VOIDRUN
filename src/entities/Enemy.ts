@@ -64,6 +64,9 @@ export class Enemy extends Entity {
     this.isEnraged = false; this.rangedCooldown = 0;
     this.flashTimer = 0; this.pulsePhase = 0;
     this.animFrame = 0; this.animTimer = 0;
+
+    if (this.sprite) this.sprite.removeFromParent();
+    this.createSprite();
   }
 
   createSprite(): Sprite {

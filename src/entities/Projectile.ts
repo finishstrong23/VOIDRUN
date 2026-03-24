@@ -35,6 +35,9 @@ export class Projectile extends Entity {
     this.hp = 1;
     this.maxHP = 1;
     this.active = true;
+
+    if (this.sprite) this.sprite.removeFromParent();
+    this.createSprite();
   }
 
   isExpired(): boolean {
